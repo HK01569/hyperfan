@@ -219,6 +219,13 @@ impl App {
             app.pwm_aliases = saved.pwm_aliases;
             app.temp_aliases = saved.temp_aliases;
             app.groups = saved.controller_groups;
+            
+            // Auto-apply saved curves if they exist
+            if let Some(curves_cfg) = saved.curves {
+                app.editor_groups = curves_cfg.groups;
+                // Apply curves immediately on startup
+                crate::handlers::apply_curves_to_hardware(&app);
+            }
         } else if let Some(saved) = load_saved_config() {
             app.mappings = saved
                 .mappings

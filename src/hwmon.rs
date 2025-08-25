@@ -708,7 +708,7 @@ pub fn get_auto_detect_progress() -> f64 {
 fn auto_detect_pairings_internal() -> Result<Vec<FanPwmPairing>, HwmonError> {
     // Enumerate ALL sensors first (fans, PWMs, temps) for full coverage
     let inventory = enumerate_all_sensors();
-    let mut all_fans = inventory.fans.clone();
+    let all_fans = inventory.fans.clone();
     let all_pwms = inventory.pwms.clone();
 
     let pwm_controllers = all_pwms.clone();
@@ -931,7 +931,7 @@ fn auto_detect_pairings_internal() -> Result<Vec<FanPwmPairing>, HwmonError> {
     // Global greedy maximum-weight matching to ensure one-to-one PWM<->Fan mapping
     if !all_edges.is_empty() {
         // Sort edges by confidence descending
-        all_edges.sort_by(|a, b| b.6.partial_cmp(&a.6).unwrap());
+        all_edges.sort_by(|a, b| b.6.partial_cmp(&a.6).unwrap_or(std::cmp::Ordering::Equal));
         use std::collections::HashSet;
         let mut used_pwms: HashSet<(String, usize)> = HashSet::new();
         let mut used_fans: HashSet<(String, usize)> = HashSet::new();

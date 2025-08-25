@@ -1,3 +1,8 @@
+# WARNING
+hyperfan is in alpha at this time. Make sure you take precautions to avoid damage to your hardware. Feedback, bug reports and feature requests are welcome thank you. If you run --ec-dump and want to contribute that file, please open an issue.
+
+Cheers!
+
 # hyperfan
 
 Hyperfan is a Linux fan control TUI powered by the `hwmon` subsystem. It enumerates temperature sensors, fan RPMs, and PWM controllers, lets you map fans to PWMs, adjust PWM output, and run a guided auto-detect routine to discover fan↔PWM pairings. A headless service mode applies saved mappings and curves.
@@ -92,4 +97,5 @@ All Rust source files include a GPL-3.0-or-later header.
 - Configurable auto-detect thresholds and timing
 - More robust curve editor UX and visualization
 - Additional chipset-specific helpers and safeguards
+- GPU support for AMD, nVIDIA and Intel cards. Legacy cards may be supported in time.
 - Optional cross-platform support (Windows/macOS) as a stretch goal
