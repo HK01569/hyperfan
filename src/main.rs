@@ -162,6 +162,11 @@ fn run_app(terminal: &mut Terminal<ratatui::backend::CrosstermBackend<std::io::S
 
         if app.last_refresh.elapsed() >= app.refresh_interval {
             app.refresh();
+            
+            // Apply curves continuously if curve data exists
+            if !app.editor_groups.is_empty() {
+                handlers::apply_curves_to_hardware(&mut app);
+            }
         }
 
         // Check if auto-detect has completed and transition to confirmation state

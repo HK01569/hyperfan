@@ -1,9 +1,9 @@
 [package]
 name = "hyperfan"
-version = "0.1.0"
+version = "0.3.8"
 edition = "2021"
-authors = ["Hyperfan Contributors"]
-license = "MIT OR Apache-2.0"
+authors = ["henry kleyn"]
+license = "GPL3+"
 description = "Fan control TUI for Linux using hwmon (read sensors, optional PWM control)"
 repository = "https://example.com/hyperfan"
 

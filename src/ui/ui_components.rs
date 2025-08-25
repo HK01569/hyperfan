@@ -230,7 +230,7 @@ pub fn render_auto_detect_popup(f: &mut Frame, app: &App, size: Rect) {
 
     // Status message
     let (status_text, status_style) = if app.auto_detect_await_confirm {
-        ("🎉 AUTO-DETECT COMPLETE! 🎉", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+("AUTO-DETECT COMPLETE!", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
     } else {
         let is_running = app.auto_detect_running.lock()
             .map(|g| *g)
@@ -255,7 +255,7 @@ pub fn render_auto_detect_popup(f: &mut Frame, app: &App, size: Rect) {
     
     if !app.auto_detect_await_confirm && !is_running {
         let warning = Paragraph::new(vec![
-            Line::from("⚠️  WARNING: Fans will cycle between low and high speeds!").style(Style::default().fg(Color::Yellow)),
+            Line::from("WARNING: Fans will cycle between low and high speeds!").style(Style::default().fg(Color::Yellow)),
             Line::from("This may cause temporary noise and temperature changes.").style(Style::default().fg(Color::Gray)),
         ])
         .alignment(Alignment::Center)
@@ -263,9 +263,9 @@ pub fn render_auto_detect_popup(f: &mut Frame, app: &App, size: Rect) {
         f.render_widget(warning, chunks[1]);
     } else if app.auto_detect_await_confirm {
         let notice = Paragraph::new(vec![
-            Line::from("🔍 Review the detected fan-to-PWM mappings below").style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Line::from("✅ Press ENTER to save these mappings to your configuration").style(Style::default().fg(Color::Yellow)),
-            Line::from("❌ Press ESC to discard and return to main menu").style(Style::default().fg(Color::Red)),
+            Line::from("Review the detected fan-to-PWM mappings below").style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Line::from("Press ENTER to save these mappings to your configuration").style(Style::default().fg(Color::Yellow)),
+            Line::from("Press ESC to discard and return to main menu").style(Style::default().fg(Color::Red)),
         ])
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true });
@@ -366,7 +366,7 @@ pub fn render_auto_detect_popup(f: &mut Frame, app: &App, size: Rect) {
 
     // Instructions
     let (instructions, instruction_style) = if app.auto_detect_await_confirm {
-        ("🔥 ENTER = Save Changes    ESC = Discard Results 🔥", 
+        ("ENTER = Save Changes    ESC = Discard Results", 
          Style::default().fg(Color::White).bg(Color::Blue).add_modifier(Modifier::BOLD))
     } else {
         let is_running = app.auto_detect_running.lock()
@@ -495,6 +495,41 @@ pub fn render_warning_popup(f: &mut Frame, app: &App, size: Rect) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
     f.render_widget(instructions, chunks[1]);
+}
+
+/// Render the save config prompt popup
+pub fn render_save_config_prompt(f: &mut Frame, app: &App, size: Rect) {
+    let popup_area = centered_rect(60, 40, size);
+    f.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Save Configuration ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Green));
+    f.render_widget(block.clone(), popup_area);
+
+    let inner = block.inner(popup_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4),
+            Constraint::Length(2),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    // Display the current status message which contains context about why we're saving
+    let message = Paragraph::new(app.status.as_str())
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+    f.render_widget(message, chunks[0]);
+
+    let instructions = Paragraph::new("Enter: Save to /etc/hyperfan/profile.json | Esc: Cancel")
+        .style(Style::default().fg(Color::Yellow))
+        .alignment(Alignment::Center);
+    f.render_widget(instructions, chunks[2]);
 }
 
 /// Render the confirm save popup

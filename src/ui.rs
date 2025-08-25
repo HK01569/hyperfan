@@ -71,4 +71,7 @@ pub fn ui(f: &mut Frame, app: &App) {
     if app.show_confirm_save_popup {
         render_confirm_save_popup(f, app, size);
     }
+    if app.show_save_config_prompt {
+        render_save_config_prompt(f, app, size);
+    }
 }

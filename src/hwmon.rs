@@ -340,8 +340,13 @@ pub fn write_pwm(chip_name: &str, pwm_idx: usize, value: u8) -> Result<(), Hwmon
         // Set to manual mode (1) first
         let mut manual_forced = false;
         if enable_path.exists() {
-            fs::write(&enable_path, "1")?;
-            manual_forced = true;
+            match fs::write(&enable_path, "1") {
+                Ok(_) => manual_forced = true,
+                Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    return Err(HwmonError::PermissionDenied);
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
         // Determine scaled write value if pwm*_max is present
         let write_val = if pwm_max_path.exists() {
@@ -350,13 +355,20 @@ pub fn write_pwm(chip_name: &str, pwm_idx: usize, value: u8) -> Result<(), Hwmon
                     let scaled = (value as u64) * maxv / 255u64;
                     scaled.to_string()
                 }
+                Err(e) => return Err(HwmonError::Parse(format!("Failed to parse pwm_max: {}", e))),
                 _ => value.to_string(),
             }
         } else {
             value.to_string()
         };
         // Write PWM value
-        fs::write(&pwm_path, &write_val)?;
+        match fs::write(&pwm_path, &write_val) {
+            Ok(_) => {},
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                return Err(HwmonError::PermissionDenied);
+            }
+            Err(e) => return Err(e.into()),
+        }
         // Emit JSON log line (no-op if logger not initialized)
         logger::log_event(
             "pwm_write",
@@ -928,33 +940,64 @@ fn auto_detect_pairings_internal() -> Result<Vec<FanPwmPairing>, HwmonError> {
         }
     }
 
-    // Global greedy maximum-weight matching to ensure one-to-one PWM<->Fan mapping
+    // Functional matching: find actual PWM→fan control relationships
     if !all_edges.is_empty() {
-        // Sort edges by confidence descending
-        all_edges.sort_by(|a, b| b.6.partial_cmp(&a.6).unwrap_or(std::cmp::Ordering::Equal));
-        use std::collections::HashSet;
-        let mut used_pwms: HashSet<(String, usize)> = HashSet::new();
+        use std::collections::{HashMap, HashSet};
+        
+        // Group edges by PWM to find the strongest responding fan for each PWM
+        let mut pwm_to_fans: HashMap<(String, usize), Vec<(String, usize, String, f64)>> = HashMap::new();
+        
+        for (pwm_chip, pwm_idx, _pwm_label, fan_chip, fan_idx, fan_label, confidence) in &all_edges {
+            let pwm_key = (pwm_chip.clone(), *pwm_idx);
+            pwm_to_fans.entry(pwm_key).or_insert_with(Vec::new).push((
+                fan_chip.clone(), *fan_idx, fan_label.clone(), *confidence
+            ));
+        }
+        
+        // For each PWM, find its strongest responding fan
         let mut used_fans: HashSet<(String, usize)> = HashSet::new();
-
-        for (pwm_chip, pwm_idx, pwm_label, fan_chip, fan_idx, fan_label, confidence) in all_edges {
-            let pwm_key = (pwm_chip.clone(), pwm_idx);
-            let fan_key = (fan_chip.clone(), fan_idx);
-            if used_pwms.contains(&pwm_key) || used_fans.contains(&fan_key) { continue; }
-            // final acceptance threshold and minimal margin not directly needed in greedy; rely on confidence cutoff
-            if confidence > 0.25 {
-                pairings.push(FanPwmPairing {
-                    fan_chip: fan_chip.clone(),
-                    fan_idx,
-                    fan_label: fan_label.clone(),
-                    pwm_chip: pwm_chip.clone(),
-                    pwm_idx,
-                    pwm_label: pwm_label.clone(),
-                    confidence,
-                });
-                used_pwms.insert(pwm_key);
-                used_fans.insert(fan_key);
+        let mut pwm_assignments: Vec<(String, usize, String, String, usize, String, f64)> = Vec::new();
+        
+        for ((pwm_chip, pwm_idx), mut fan_responses) in pwm_to_fans {
+            // Sort fans by confidence for this PWM (highest first)
+            fan_responses.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+            
+            // Find the strongest responding fan that hasn't been used
+            for (fan_chip, fan_idx, fan_label, confidence) in fan_responses {
+                let fan_key = (fan_chip.clone(), fan_idx);
+                if !used_fans.contains(&fan_key) && confidence > 0.25 {
+                    // Find the PWM label for this assignment
+                    if let Some((_, _, pwm_label, _, _, _, _)) = all_edges.iter()
+                        .find(|(pc, pi, _, fc, fi, _, _)| pc == &pwm_chip && *pi == pwm_idx && fc == &fan_chip && *fi == fan_idx) {
+                        pwm_assignments.push((
+                            pwm_chip.clone(), pwm_idx, pwm_label.clone(),
+                            fan_chip.clone(), fan_idx, fan_label.clone(),
+                            confidence
+                        ));
+                        used_fans.insert(fan_key);
+                        break;
+                    }
+                }
             }
         }
+        
+        // Convert assignments to pairings
+        for (pwm_chip, pwm_idx, pwm_label, fan_chip, fan_idx, fan_label, confidence) in pwm_assignments {
+            pairings.push(FanPwmPairing {
+                fan_chip,
+                fan_idx,
+                fan_label,
+                pwm_chip,
+                pwm_idx,
+                pwm_label,
+                confidence,
+            });
+        }
+        
+        log_autodetect_line(&format!(
+            "auto-detect: functional matching found {} PWM→fan pairings",
+            pairings.len()
+        ));
     }
 
     // Secondary probing for any unmatched PWMs: pulse them with longer dwell and find strongest responding fan

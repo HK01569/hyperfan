@@ -278,7 +278,16 @@ fn render_control_block(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
-    let status = Paragraph::new(app.status.as_str())
+    let mut status_text = app.status.clone();
+    
+    // Add curve status indicator if curves are active
+    if !app.editor_groups.is_empty() {
+        let curve_count = app.editor_groups.len();
+        let curve_status = format!(" | CURVES ACTIVE: {} group(s)", curve_count);
+        status_text.push_str(&curve_status);
+    }
+    
+    let status = Paragraph::new(status_text.as_str())
         .style(Style::default().fg(Color::Gray));
     f.render_widget(status, area);
 }

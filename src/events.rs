@@ -66,9 +66,19 @@ fn handle_popup_events(app: &mut App, code: KeyCode, modifiers: KeyModifiers) ->
         return Ok(true);
     }
     
+    // Save config prompt popup
+    if app.show_save_config_prompt {
+        match code {
+            KeyCode::Enter => save_baseline_config(app),
+            KeyCode::Esc => cancel_save_config_prompt(app),
+            _ => {}
+        }
+        return Ok(true);
+    }
+    
     // Warning popup
     if app.show_warning_popup {
-        if matches!(code, KeyCode::Esc | KeyCode::Enter) {
+        if code == KeyCode::Esc || code == KeyCode::Enter {
             app.show_warning_popup = false;
             app.warning_message.clear();
         }
@@ -282,7 +292,20 @@ fn handle_auto_detect_popup(app: &mut App, code: KeyCode) -> anyhow::Result<()> 
             app.show_auto_detect = false;
             app.auto_detect_await_confirm = false;
         }
-        KeyCode::Enter if app.auto_detect_await_confirm => confirm_auto_detect(app),
+        KeyCode::Enter if app.auto_detect_await_confirm => {
+            // Check if we have results (scan completed) or need to start scan
+            let has_results = app.auto_detect_results.lock()
+                .map(|g| !g.is_empty())
+                .unwrap_or(false);
+            
+            if has_results {
+                // Save the completed scan results
+                save_auto_detect_results(app);
+            } else {
+                // Start a new scan
+                confirm_auto_detect(app);
+            }
+        },
         KeyCode::Enter => {
             let is_running = match app.auto_detect_running.lock() {
                 Ok(guard) => *guard,
@@ -396,15 +419,17 @@ fn handle_curve_editor_events(app: &mut App, code: KeyCode, modifiers: KeyModifi
         (KeyCode::Left, _) => app.editor_focus_right = false,
         (KeyCode::Right, _) => app.editor_focus_right = true,
         (KeyCode::Up, _) if !app.editor_focus_right => {
-            if app.editor_group_idx > 0 {
+            if !app.editor_groups.is_empty() && app.editor_group_idx > 0 {
                 app.editor_group_idx -= 1;
                 app.editor_point_idx = 0;
+                app.status = format!("Selected group {} of {}", app.editor_group_idx + 1, app.editor_groups.len());
             }
         }
         (KeyCode::Down, _) if !app.editor_focus_right => {
-            if app.editor_group_idx + 1 < app.editor_groups.len() {
+            if !app.editor_groups.is_empty() && app.editor_group_idx + 1 < app.editor_groups.len() {
                 app.editor_group_idx += 1;
                 app.editor_point_idx = 0;
+                app.status = format!("Selected group {} of {}", app.editor_group_idx + 1, app.editor_groups.len());
             }
         }
         (KeyCode::Char('n'), _) => editor_add_group(app),

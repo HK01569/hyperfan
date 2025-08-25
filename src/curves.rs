@@ -32,6 +32,9 @@ pub struct CurvePoint {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CurveSpec {
+    #[serde(flatten)]
+    pub pairs: std::collections::HashMap<String, std::collections::HashMap<String, u8>>,
+    #[serde(skip)]
     pub points: Vec<CurvePoint>,
     #[serde(default = "default_min_pwm")] pub min_pwm_pct: u8,
     #[serde(default = "default_max_pwm")] pub max_pwm_pct: u8,
@@ -39,6 +42,53 @@ pub struct CurveSpec {
     #[serde(default = "default_hyst")] pub hysteresis_pct: u8,
     #[serde(default = "default_write_min_delta")] pub write_min_delta: u8,
     #[serde(default = "default_apply_delay_ms")] pub apply_delay_ms: u32,
+}
+
+impl CurveSpec {
+    pub fn new() -> Self {
+        Self {
+            pairs: std::collections::HashMap::new(),
+            points: Vec::new(),
+            min_pwm_pct: 0,
+            max_pwm_pct: 100,
+            floor_pwm_pct: 0,
+            hysteresis_pct: 5,
+            write_min_delta: 5,
+            apply_delay_ms: 0,
+        }
+    }
+
+    pub fn sync_pairs_from_points(&mut self) {
+        self.pairs.clear();
+        for (i, point) in self.points.iter().enumerate() {
+            let pair_key = format!("Pair{}", i);
+            let temp_key = format!("{}", point.temp_c as u32);
+            let mut temp_map = std::collections::HashMap::new();
+            temp_map.insert(temp_key, point.pwm_pct);
+            self.pairs.insert(pair_key, temp_map);
+        }
+    }
+
+    pub fn sync_points_from_pairs(&mut self) {
+        self.points.clear();
+        let mut pairs: Vec<_> = self.pairs.iter().collect();
+        pairs.sort_by_key(|(key, _)| {
+            key.strip_prefix("Pair")
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0)
+        });
+        
+        for (_, temp_map) in pairs {
+            for (temp_str, pwm) in temp_map {
+                if let Ok(temp) = temp_str.parse::<f64>() {
+                    self.points.push(CurvePoint {
+                        temp_c: temp,
+                        pwm_pct: *pwm,
+                    });
+                }
+            }
+        }
+    }
 }
 
 fn default_min_pwm() -> u8 { 0 }
@@ -73,13 +123,19 @@ pub fn load_curves() -> Option<CurvesConfig> {
 
 pub fn write_curves(cfg: &CurvesConfig) -> io::Result<()> {
     validate_curves(cfg).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let p = curves_system_path();
-    if let Some(parent) = p.parent() { let _ = fs::create_dir_all(parent); }
+    let path = curves_system_path();
+    
+    // Create directory if it doesn't exist - same pattern as write_system_config
+    if let Some(parent) = path.parent() { 
+        fs::create_dir_all(parent)?; 
+    }
+    
     let json = serde_json::to_string_pretty(cfg).unwrap_or_else(|_| "{}".to_string());
-    fs::write(&p, json)?;
-    // set 0644
+    fs::write(&path, json)?;
+    
+    // Best-effort set permissions to 0644 - same pattern as write_system_config
     let perms = fs::Permissions::from_mode(0o644);
-    let _ = fs::set_permissions(&p, perms);
+    let _ = fs::set_permissions(&path, perms);
     Ok(())
 }
 

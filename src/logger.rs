@@ -24,7 +24,6 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lazy_static::lazy_static;
-use serde::Serialize;
 use serde_json::{json, Value};
 
 const DEFAULT_LOG_PATH: &str = "/etc/hyperfan/logs.json";
@@ -85,9 +84,3 @@ pub fn log_event(event: &str, data: Value) {
     }
 }
 
-pub fn log_kv<T: Serialize>(event: &str, data: &T) {
-    match serde_json::to_value(data) {
-        Ok(v) => log_event(event, v),
-        Err(_) => log_event(event, json!({"_error": "serialize_failed"})),
-    }
-}

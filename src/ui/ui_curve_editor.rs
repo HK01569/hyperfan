@@ -29,11 +29,20 @@ use ratatui::{
 
 /// Render the curve editor UI
 pub fn render_curve_editor(f: &mut Frame, app: &App, size: Rect) {
+    // Vertical split: main content | bottom bar
+    let main_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(3),
+        ])
+        .split(size);
+
     // Horizontal split: left = CONTROL pairs, right = Graph
     let layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(size);
+        .split(main_layout[0]);
 
     // Left panel: Control groups list
     render_control_panel(f, app, layout[0]);
@@ -44,6 +53,9 @@ pub fn render_curve_editor(f: &mut Frame, app: &App, size: Rect) {
     } else {
         render_point_editor(f, app, layout[1]);
     }
+
+    // Bottom bar: Save and Exit
+    render_bottom_bar(f, app, main_layout[1]);
 
     // Render popups
     if app.show_curve_delay_popup {
@@ -112,9 +124,9 @@ fn render_control_panel(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_graph_panel(f: &mut Frame, app: &App, area: Rect) {
     let title = if app.editor_graph_mode {
-        " 📊 Fan Curve Graph [INTERACTIVE] • ←→ navigate, ↑↓ adjust, Enter confirm "
+        " Fan Curve Graph [INTERACTIVE] • ←→ navigate, ↑↓ adjust, Enter confirm "
     } else {
-        " 📊 Fan Curve Graph • Press 'u' for interactive editing "
+        " Fan Curve Graph • Press 'u' for interactive editing "
     };
     
     let graph_block = Block::default()
@@ -335,9 +347,9 @@ fn render_graph_panel(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_point_editor(f: &mut Frame, app: &App, area: Rect) {
     let title = if app.editor_graph_mode {
-        " 📝 Curve Details [Graph Mode Active] "
+        " Curve Details [Graph Mode Active] "
     } else {
-        " 📝 Curve Details [List Mode] "
+        " Curve Details [List Mode] "
     };
     
     let editor_block = Block::default()
@@ -371,13 +383,13 @@ fn render_point_editor(f: &mut Frame, app: &App, area: Rect) {
         
         // Members with icons
         let members_str = if group.members.len() > 3 {
-            format!("🎛️  {} PWMs", group.members.len())
+            format!("{} PWMs", group.members.len())
         } else {
             let pwms = group.members.iter()
                 .map(|m| m.split(':').last().unwrap_or(m))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("🎛️  {}", pwms)
+            format!("{}", pwms)
         };
         lines.push(Line::from(vec![
             Span::styled("Controls: ", Style::default().fg(Color::Gray)),
@@ -389,7 +401,7 @@ fn render_point_editor(f: &mut Frame, app: &App, area: Rect) {
             .unwrap_or(&group.temp_source);
         lines.push(Line::from(vec![
             Span::styled("Sensor: ", Style::default().fg(Color::Gray)),
-            Span::raw("🌡️  "),
+            Span::raw(""),
             Span::styled(temp_source, Style::default().fg(Color::Yellow)),
         ]));
         
@@ -432,12 +444,12 @@ fn render_point_editor(f: &mut Frame, app: &App, area: Rect) {
         ]));
         
         lines.push(Line::from(vec![
-            Span::styled("⏱️  Delay: ", Style::default().fg(Color::Gray)),
+            Span::styled("Delay: ", Style::default().fg(Color::Gray)),
             Span::styled(format!("{}ms", group.curve.apply_delay_ms), Style::default().fg(Color::White)),
             Span::styled(" (response time)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("〰️  Hysteresis: ", Style::default().fg(Color::Gray)),
+            Span::styled("Hysteresis: ", Style::default().fg(Color::Gray)),
             Span::styled(format!("{}%", group.curve.hysteresis_pct), Style::default().fg(Color::White)),
             Span::styled(" (deadband)", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
         ]));
@@ -499,17 +511,35 @@ fn render_point_editor(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
         
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(": Save all curves  ", Style::default().fg(Color::Gray)),
-            Span::styled("Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::styled(": Exit", Style::default().fg(Color::Gray)),
-        ]));
         
         let editor_text = Paragraph::new(lines);
         f.render_widget(editor_text, editor_inner);
     }
+}
+
+fn render_bottom_bar(f: &mut Frame, _app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .title(" Actions ")
+        .border_style(Style::default().fg(Color::DarkGray));
+    
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    
+    let actions = vec![
+        Span::styled("s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(": Save all curves", Style::default().fg(Color::Gray)),
+        Span::styled("  │  ", Style::default().fg(Color::DarkGray)),
+        Span::styled("Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::styled(": Exit curve editor", Style::default().fg(Color::Gray)),
+    ];
+    
+    let actions_line = Line::from(actions);
+    let actions_paragraph = Paragraph::new(actions_line)
+        .alignment(Alignment::Center);
+    
+    f.render_widget(actions_paragraph, inner);
 }
 
 pub fn render_delay_popup(f: &mut Frame, app: &App, size: Rect) {
@@ -593,7 +623,7 @@ pub fn render_temp_source_popup(f: &mut Frame, app: &App, size: Rect) {
 
     // Temperature list
     let temp_items: Vec<ListItem> = app.temps.iter().enumerate().map(|(idx, (temp_full, _))| {
-        let style = if idx == app.editor_temp_idx {
+        let style = if idx == app.temp_source_selection {
             Style::default().bg(Color::DarkGray)
         } else {
             Style::default()

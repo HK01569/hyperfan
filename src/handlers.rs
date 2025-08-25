@@ -84,8 +84,6 @@ pub fn groups_apply_map_pwm(app: &mut App) {
     app.show_map_pwm_popup = false;
 }
 
-pub fn groups_prev(app: &mut App) { if app.group_idx > 0 { app.group_idx -= 1; } }
-pub fn groups_next(app: &mut App) { if app.group_idx + 1 < app.groups.len() { app.group_idx += 1; } }
 
 pub fn groups_delete_current(app: &mut App) {
     if app.groups.is_empty() { return; }
@@ -215,7 +213,85 @@ use std::fs;
 fn is_safe_user_label(s: &str) -> bool {
     // Allow a friendly set of characters similar to config::is_safe_label
     if s.is_empty() || s.len() > 128 { return false; }
-    s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | '-' | '.' | ' ' | '@'))
+    s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | '-' | '.' | ' '))
+}
+
+/// Auto-create curves.json from CONTROL mappings with default values
+fn create_curves_from_mappings(app: &mut App) {
+    if app.mappings.is_empty() {
+        return;
+    }
+    
+    // Get default temperature source (first available temp sensor)
+    let temp_source = if !app.temps.is_empty() {
+        app.temps[0].0.clone()
+    } else {
+        "temp0".to_string()
+    };
+    
+    // Create default curve points with reasonable temperature/PWM mapping
+    let mut default_curve = crate::curves::CurveSpec::new();
+    default_curve.points = vec![
+        crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+        crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+        crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+        crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+    ];
+    default_curve.apply_delay_ms = 1000;
+    default_curve.sync_pairs_from_points();
+    
+    // Create curve groups from CONTROL mappings
+    let mut groups = Vec::new();
+    for mapping in &app.mappings {
+        let fan_name = app.fan_aliases.get(&mapping.fan)
+            .cloned()
+            .unwrap_or_else(|| mapping.fan.clone());
+        let pwm_name = app.pwm_aliases.get(&mapping.pwm)
+            .cloned()
+            .unwrap_or_else(|| mapping.pwm.clone());
+        
+        groups.push(crate::curves::CurveGroup {
+            name: format!("{} → {}", fan_name, pwm_name),
+            members: vec![mapping.pwm.clone()],
+            temp_source: temp_source.clone(),
+            curve: default_curve.clone(),
+        });
+    }
+    
+    // Create curves config and write to file
+    let curves_config = crate::curves::CurvesConfig {
+        version: 1,
+        groups,
+    };
+    
+    if let Err(e) = crate::curves::write_curves(&curves_config) {
+        app.status = format!("Failed to create curves.json: {}", e);
+        return;
+    }
+    
+    // Load the created curves into the editor
+    app.editor_groups = curves_config.groups;
+    app.editor_group_idx = 0;
+    app.editor_point_idx = 0;
+}
+
+fn mappings_match_saved(current: &[crate::app::Mapping], saved: &[crate::config::SavedMapping]) -> bool {
+    if current.len() != saved.len() {
+        return false;
+    }
+    
+    // Convert saved mappings to a comparable format
+    let mut saved_pairs: Vec<(String, String)> = saved.iter()
+        .map(|m| (m.fan.clone(), m.pwm.clone()))
+        .collect();
+    saved_pairs.sort();
+    
+    let mut current_pairs: Vec<(String, String)> = current.iter()
+        .map(|m| (m.fan.clone(), m.pwm.clone()))
+        .collect();
+    current_pairs.sort();
+    
+    current_pairs == saved_pairs
 }
 
 fn is_safe_group_label(s: &str) -> bool {
@@ -325,26 +401,51 @@ pub fn cancel_rename(app: &mut App) {
 
 // ===== Curve Editor Handlers =====
 pub fn toggle_curve_editor(app: &mut App) {
-    app.show_curve_editor = !app.show_curve_editor;
     if app.show_curve_editor {
-        app.editor_focus_right = false;
+        // Exiting curve editor
+        app.show_curve_editor = false;
+        app.status = "Exited curve editor".to_string();
+        return;
+    }
+    
+    // Entering curve editor - perform validation first
+    // Profile validation: Check if /etc/hyperfan/profile.json exists
+    let profile_path = crate::config::system_config_path();
+    let profile_exists = profile_path.exists();
+    
+    if !profile_exists {
+        // Profile doesn't exist - prompt user to save current state
+        app.show_save_config_prompt = true;
+        app.status = "Profile /etc/hyperfan/profile.json not found. Save current system state first?".to_string();
+        return;
+    }
+    
+    // Profile exists - check if current mappings match saved data
+    if let Ok(saved_config) = crate::config::try_load_system_config() {
+        let current_mappings_match = mappings_match_saved(&app.mappings, &saved_config.mappings);
+        
+        if !current_mappings_match {
+            // Current mappings don't match saved profile - prompt to save
+            app.show_save_config_prompt = true;
+            app.status = "Current fan/PWM mappings differ from saved profile. Save changes to profile.json first?".to_string();
+            return;
+        }
+    }
+    
+    // Validation passed - enter curve editor
+    app.show_curve_editor = true;
+    app.editor_focus_right = false;
+    
+    // Only load curves if we don't already have them
+    if app.editor_groups.is_empty() {
         // Get the set of PWMs that are actually mapped in CONTROL section
         let mapped_pwms: std::collections::HashSet<String> = app.mappings
             .iter()
             .map(|m| m.pwm.clone())
             .collect();
-        
-        // Debug: show what mappings we have
-        app.status = format!("Debug: {} mappings, PWMs: {:?}", app.mappings.len(), mapped_pwms);
 
         if let Ok(saved) = crate::config::try_load_system_config() {
             if let Some(curves_cfg) = saved.curves {
-                // Debug: show what curve groups we found
-                let group_info: Vec<String> = curves_cfg.groups.iter()
-                    .map(|g| format!("'{}': {:?}", g.name, g.members))
-                    .collect();
-                app.status = format!("Debug: {} groups found: {}", curves_cfg.groups.len(), group_info.join(", "));
-                
                 // Filter groups to only include those with members that are actually mapped
                 app.editor_groups = curves_cfg.groups
                     .into_iter()
@@ -366,9 +467,8 @@ pub fn toggle_curve_editor(app: &mut App) {
                 app.editor_group_idx = 0;
                 app.editor_point_idx = 0;
             } else {
-                app.editor_groups.clear();
-                app.editor_group_idx = 0;
-                app.editor_point_idx = 0;
+                // No curves in profile.json and no curves.json - create stub curves from CONTROL mappings
+                create_stub_curves_from_mappings(app, &mapped_pwms);
             }
         } else if let Some(cfg) = curves::load_curves() {
             // Filter groups to only include those with members that are actually mapped
@@ -381,67 +481,75 @@ pub fn toggle_curve_editor(app: &mut App) {
             app.editor_group_idx = 0;
             app.editor_point_idx = 0;
         } else {
-            app.editor_groups.clear();
-            app.editor_group_idx = 0;
-            app.editor_point_idx = 0;
+            // No profile.json but curves.json might exist - create stub curves from CONTROL mappings
+            create_stub_curves_from_mappings(app, &mapped_pwms);
         }
-        // Create default groups for any mappings that don't have curve groups
-        if !app.mappings.is_empty() && app.editor_groups.is_empty() {
-            // No existing curve groups but we have mappings - create default groups
-            let temp_source = if !app.temps.is_empty() {
-                app.temps[0].0.clone()
-            } else {
-                "temp0".to_string()
-            };
-
-            let default_curve = crate::curves::CurveSpec {
-                points: vec![
-                    crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
-                    crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
-                    crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
-                    crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
-                ],
-                min_pwm_pct: 0,
-                max_pwm_pct: 100,
-                floor_pwm_pct: 0,
-                hysteresis_pct: 5,
-                write_min_delta: 5,
-                apply_delay_ms: 1000,
-            };
-
-            // Create individual curve groups for each mapping
-            for mapping in &app.mappings {
-                let fan_name = app.fan_aliases.get(&mapping.fan)
-                    .cloned()
-                    .unwrap_or_else(|| mapping.fan.clone());
-                let pwm_name = app.pwm_aliases.get(&mapping.pwm)
-                    .cloned()
-                    .unwrap_or_else(|| mapping.pwm.clone());
-                
-                app.editor_groups.push(crate::curves::CurveGroup {
-                    name: format!("{} → {}", fan_name, pwm_name),
-                    members: vec![mapping.pwm.clone()],
-                    temp_source: temp_source.clone(),
-                    curve: default_curve.clone(),
-                });
-            }
-            
-            app.status = format!("Created {} default curve groups for mappings", app.editor_groups.len());
-        } else if app.mappings.is_empty() && app.editor_groups.is_empty() {
-            editor_add_group(app);
-        }
-        // Ensure selection indices are in range
-        if app.editor_group_idx >= app.editor_groups.len() {
-            app.editor_group_idx = app.editor_groups.len().saturating_sub(1);
-        }
-        if app.editor_groups.is_empty() {
-            app.editor_group_idx = 0;
-            app.editor_point_idx = 0;
-        }
-        app.status = "Curve editor: n=new (auto), t=set temp, [/] select point, +/- adjust, g=graph, h=delay (ms), s=save, Esc=exit".to_string();
-    } else {
-        app.status = "Exited curve editor".to_string();
     }
+    
+    // Create default groups for any mappings that don't have curve groups
+    if !app.mappings.is_empty() && app.editor_groups.is_empty() {
+        // No existing curve groups but we have mappings - create default groups
+        let temp_source = if !app.temps.is_empty() {
+            app.temps[0].0.clone()
+        } else {
+            "temp0".to_string()
+        };
+
+        let mut default_curve = crate::curves::CurveSpec::new();
+        default_curve.points = vec![
+            crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+            crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+            crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+            crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+        ];
+        default_curve.apply_delay_ms = 1000;
+        default_curve.sync_pairs_from_points();
+
+        // Create individual curve groups for each mapping
+        for mapping in &app.mappings {
+            let fan_name = app.fan_aliases.get(&mapping.fan)
+                .cloned()
+                .unwrap_or_else(|| mapping.fan.clone());
+            let pwm_name = app.pwm_aliases.get(&mapping.pwm)
+                .cloned()
+                .unwrap_or_else(|| mapping.pwm.clone());
+            
+            app.editor_groups.push(crate::curves::CurveGroup {
+                name: format!("{} → {}", fan_name, pwm_name),
+                members: vec![mapping.pwm.clone()],
+                temp_source: temp_source.clone(),
+                curve: default_curve.clone(),
+            });
+        }
+        
+        // Save the newly created groups to curves.json
+        let curves_config = CurvesConfig {
+            version: 1,
+            groups: app.editor_groups.clone(),
+        };
+
+        match curves::write_curves(&curves_config) {
+            Ok(()) => {
+                app.status = format!("Created {} default curve groups and saved to curves.json", app.editor_groups.len());
+            }
+            Err(e) => {
+                app.status = format!("Created {} default curve groups but failed to save: {}", app.editor_groups.len(), e);
+            }
+        }
+    } else if app.mappings.is_empty() && app.editor_groups.is_empty() {
+        editor_add_group(app);
+    }
+    
+    // Ensure selection indices are in range
+    if app.editor_group_idx >= app.editor_groups.len() {
+        app.editor_group_idx = app.editor_groups.len().saturating_sub(1);
+    }
+    if app.editor_groups.is_empty() {
+        app.editor_group_idx = 0;
+        app.editor_point_idx = 0;
+    }
+    
+    app.status = "Curve editor: n=new (auto), t=temp source, [/] select point, +/- adjust, g=graph, h=delay (ms), y=hysteresis, s=save, Esc=exit".to_string();
 }
 
 pub fn editor_add_group(app: &mut App) {
@@ -491,25 +599,21 @@ pub fn editor_add_group(app: &mut App) {
         None => app.temps.first().map(|(s, _)| s.clone()).unwrap_or_default(),
     };
 
+    let mut curve = CurveSpec::new();
+    curve.points = vec![
+        CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+        CurvePoint { temp_c: 40.0, pwm_pct: 30 },
+        CurvePoint { temp_c: 50.0, pwm_pct: 50 },
+        CurvePoint { temp_c: 60.0, pwm_pct: 70 },
+        CurvePoint { temp_c: 70.0, pwm_pct: 100 },
+    ];
+    curve.sync_pairs_from_points();
+    
     let group = CurveGroup {
         name,
         members,
         temp_source,
-        curve: CurveSpec {
-            points: vec![
-                CurvePoint { temp_c: 30.0, pwm_pct: 20 },
-                CurvePoint { temp_c: 40.0, pwm_pct: 30 },
-                CurvePoint { temp_c: 50.0, pwm_pct: 50 },
-                CurvePoint { temp_c: 60.0, pwm_pct: 70 },
-                CurvePoint { temp_c: 70.0, pwm_pct: 100 },
-            ],
-            min_pwm_pct: 0,
-            max_pwm_pct: 100,
-            floor_pwm_pct: 0,
-            hysteresis_pct: 5,
-            write_min_delta: 5,
-            apply_delay_ms: 0,
-        },
+        curve,
     };
     app.editor_groups.push(group);
     app.editor_group_idx = app.editor_groups.len().saturating_sub(1);
@@ -776,23 +880,6 @@ pub fn editor_graph_commit_points(app: &mut App) {
     app.editor_dirty = true;
 }
 
-pub fn editor_prev_group(app: &mut App) {
-    if app.editor_groups.is_empty() { return; }
-    if app.editor_group_idx > 0 { app.editor_group_idx -= 1; }
-    app.editor_point_idx = 0;
-}
-
-pub fn editor_next_group(app: &mut App) {
-    if app.editor_groups.is_empty() { return; }
-    if app.editor_group_idx + 1 < app.editor_groups.len() { app.editor_group_idx += 1; }
-    app.editor_point_idx = 0;
-}
-
-pub fn editor_set_temp_from_current(app: &mut App) {
-    if app.editor_groups.is_empty() { return; }
-    let src = match app.temps.get(app.temps_idx) { Some((s, _)) => s.clone(), None => return };
-    app.editor_groups[app.editor_group_idx].temp_source = src;
-}
 
 pub fn editor_add_member_current(app: &mut App) {
     if app.editor_groups.is_empty() { return; }
@@ -884,6 +971,19 @@ pub fn editor_save_curves(app: &mut App) {
         })
         .collect();
 
+    // Deduplicate groups by PWM member - keep only the first occurrence of each PWM
+    let mut seen_pwms: std::collections::HashSet<String> = std::collections::HashSet::new();
+    groups.retain(|group| {
+        let mut group_has_new_pwm = false;
+        for member in &group.members {
+            if !seen_pwms.contains(member) {
+                seen_pwms.insert(member.clone());
+                group_has_new_pwm = true;
+            }
+        }
+        group_has_new_pwm
+    });
+
     // Ensure ALL mappings have curve groups - create default groups for any missing PWM controllers
     let mut covered_pwms: std::collections::HashSet<String> = std::collections::HashSet::new();
     for group in &groups {
@@ -893,7 +993,7 @@ pub fn editor_save_curves(app: &mut App) {
     }
 
     // Create consolidated curve groups for any unmapped PWM controllers
-    let mut uncovered_pwms: Vec<String> = app.mappings
+    let uncovered_pwms: Vec<String> = app.mappings
         .iter()
         .filter(|m| !covered_pwms.contains(&m.pwm))
         .map(|m| m.pwm.clone())
@@ -912,20 +1012,15 @@ pub fn editor_save_curves(app: &mut App) {
             }
         }
 
-        let default_curve = crate::curves::CurveSpec {
-            points: vec![
-                crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
-                crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
-                crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
-                crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
-            ],
-            min_pwm_pct: 0,
-            max_pwm_pct: 100,
-            floor_pwm_pct: 0,
-            hysteresis_pct: 5,
-            write_min_delta: 5,
-            apply_delay_ms: 1000,
-        };
+        let mut default_curve = crate::curves::CurveSpec::new();
+        default_curve.points = vec![
+            crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+            crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+            crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+            crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+        ];
+        default_curve.apply_delay_ms = 1000;
+        default_curve.sync_pairs_from_points();
         
         let temp_source = if !app.temps.is_empty() {
             app.temps[0].0.clone()
@@ -979,14 +1074,17 @@ pub fn editor_save_curves(app: &mut App) {
             };
         }
     }
-    let cfg = CurvesConfig { version: 1, groups: groups.clone() };
-    // Write to curves.json for compatibility
-    match curves::write_curves(&cfg) {
-        Ok(()) => app.status = "Saved curves to /etc/hyperfan/curves.json".to_string(),
-        Err(e) => app.status = format!("Failed to save curves: {}", e),
+    // Sync pairs from points for all groups before saving
+    for group in &mut groups {
+        group.curve.sync_pairs_from_points();
     }
-    // Also persist into system profile.json so the service can consume it directly
-    let existing_overrides = crate::config::try_load_system_config().ok().map(|c| c.pwm_overrides).unwrap_or_default();
+    
+    let cfg = CurvesConfig { version: 1, groups: groups.clone() };
+    
+    // Save curves directly into profile.json
+    let existing_cfg = crate::config::try_load_system_config().ok();
+    let existing_overrides = existing_cfg.map(|c| c.pwm_overrides).unwrap_or_default();
+    
     let saved_profile = SavedConfig {
         mappings: app
             .mappings
@@ -994,24 +1092,28 @@ pub fn editor_save_curves(app: &mut App) {
             .map(|m| crate::config::SavedMapping { fan: m.fan.clone(), pwm: m.pwm.clone() })
             .collect(),
         metric: app.metric,
-        curves: Some(CurvesConfig { version: 1, groups }),
+        curves: Some(cfg.clone()),  // Save curves directly into profile
         fan_aliases: app.fan_aliases.clone(),
         pwm_aliases: app.pwm_aliases.clone(),
         temp_aliases: app.temp_aliases.clone(),
         controller_groups: app.groups.clone(),
         pwm_overrides: existing_overrides,
     };
-    if let Err(e) = write_system_config(&saved_profile) {
-        app.status = format!("Saved curves.json; failed to save curves into system profile: {}", e);
-    } else {
-        app.status = "Saved curves.json".to_string();
+    
+    match write_system_config(&saved_profile) {
+        Ok(()) => {
+            app.status = format!("Saved {} curve groups to /etc/hyperfan/profile.json", cfg.groups.len());
+        },
+        Err(e) => {
+            app.status = format!("Failed to save curves: {}", e);
+        }
     }
     // Saved successfully (at least curves.json). Clear dirty flag and return to main control pair view
     app.editor_dirty = false;
 }
 
 /// Apply curves to hardware by reading temperatures and setting PWM values accordingly
-pub fn apply_curves_to_hardware(app: &App) {
+pub fn apply_curves_to_hardware(app: &mut App) {
     if app.editor_groups.is_empty() {
         return;
     }
@@ -1030,6 +1132,8 @@ pub fn apply_curves_to_hardware(app: &App) {
         }
     }
 
+    let now = std::time::Instant::now();
+    
     for group in &app.editor_groups {
         // Get temperature for this group
         let current_temp = match temp_map.get(&group.temp_source) {
@@ -1044,45 +1148,61 @@ pub fn apply_curves_to_hardware(app: &App) {
             }
         };
 
-        // Calculate PWM percentage from curve
-        let pwm_pct = curves::interp_pwm_percent(&group.curve.points, current_temp);
-        let pwm_value = ((pwm_pct as f64 * 255.0) / 100.0) as u8;
+        // Calculate target PWM percentage from curve
+        let target_pwm_pct = curves::interp_pwm_percent(&group.curve.points, current_temp);
+        let target_pwm_value = ((target_pwm_pct as f64 * 255.0) / 100.0) as u8;
 
-        // Apply to all members of this group
+        // Apply smoothed PWM to all members of this group
         for member in &group.members {
             if let Some((chip, label)) = parse_chip_and_label(member) {
                 if let Some(idx) = hwmon::find_pwm_index_by_label(&chip, &label) {
-                    let _ = hwmon::write_pwm(&chip, idx, pwm_value);
+                    let pwm_key = format!("{}:{}", chip, idx);
+                    
+                    // Get or create smoothing state for this PWM
+                    let smoothed_value = {
+                        let state = app.pwm_smoothing_state.entry(pwm_key.clone()).or_insert_with(|| {
+                            crate::app::PwmSmoothingState {
+                                current_value: target_pwm_value,
+                                target_value: target_pwm_value,
+                                last_update: now,
+                            }
+                        });
+                        
+                        // Update target if it changed
+                        if state.target_value != target_pwm_value {
+                            state.target_value = target_pwm_value;
+                        }
+                        
+                        // Calculate smoothed value
+                        let time_delta = now.duration_since(state.last_update).as_millis() as f64;
+                        let smoothing_rate = 50.0; // PWM units per second
+                        let max_change = (smoothing_rate * time_delta / 1000.0) as i16;
+                        
+                        let current = state.current_value as i16;
+                        let target = state.target_value as i16;
+                        let diff = target - current;
+                        
+                        let new_value = if diff.abs() <= max_change {
+                            // Close enough, snap to target
+                            target as u8
+                        } else {
+                            // Move towards target by max_change
+                            (current + diff.signum() * max_change) as u8
+                        };
+                        
+                        state.current_value = new_value;
+                        state.last_update = now;
+                        
+                        new_value
+                    };
+                    
+                    let _ = hwmon::write_pwm(&chip, idx, smoothed_value);
                 }
             }
         }
     }
 }
 
-pub fn save_system_config(app: &mut App) {
-    // Preserve existing curves and overrides if present in the current system profile
-    let existing_cfg = crate::config::try_load_system_config().ok();
-    let existing_curves = existing_cfg.as_ref().and_then(|c| c.curves.clone());
-    let existing_overrides = existing_cfg.map(|c| c.pwm_overrides).unwrap_or_default();
-    let saved = SavedConfig {
-        mappings: app
-            .mappings
-            .iter()
-            .map(|m| crate::config::SavedMapping { fan: m.fan.clone(), pwm: m.pwm.clone() })
-            .collect(),
-        metric: app.metric,
-        curves: existing_curves,
-        fan_aliases: app.fan_aliases.clone(),
-        pwm_aliases: app.pwm_aliases.clone(),
-        temp_aliases: app.temp_aliases.clone(),
-        controller_groups: app.groups.clone(),
-        pwm_overrides: existing_overrides,
-    };
-    match write_system_config(&saved) {
-        Ok(()) => app.status = "Saved config to /etc/hyperfan/profile.json".to_string(),
-        Err(e) => app.status = format!("Failed to save config: {}", e),
-    }
-}
 
 pub fn start_save_system_config(app: &mut App) {
     app.show_confirm_save_popup = true;
@@ -1200,7 +1320,7 @@ pub fn start_set_pwm(app: &mut App) {
     if let Some((chip, _idx, label)) = &target {
         let full = format!("{}:{}", chip, label);
         if let Some((_, raw)) = app.pwms.iter().find(|(name, _)| name == &full) {
-            let pct = ((*raw as f64) * 100.0 / 255.0).round() as u16;
+            let pct = ((*raw as f64) * 100.0 / 255.0) as u16;
             app.set_pwm_input = pct.to_string();
         }
     }
@@ -1363,14 +1483,6 @@ pub fn delete_mapping(app: &mut App) {
     let _ = save_mappings(&app.mappings);
 }
 
-pub fn toggle_curve_popup(app: &mut App) {
-    app.show_curve_popup = !app.show_curve_popup;
-    if app.show_curve_popup {
-        app.status = "Curve manager opened (Enter to save, Esc to cancel)".to_string();
-    } else {
-        app.status = "Curve manager closed".to_string();
-    }
-}
 
 pub fn save_curve(app: &mut App) {
     // Build a minimal curves.json using current curve points and available selections/mappings
@@ -1412,19 +1524,15 @@ pub fn save_curve(app: &mut App) {
         return;
     }
 
+    let mut curve = CurveSpec::new();
+    curve.points = points;
+    curve.sync_pairs_from_points();
+    
     let group = CurveGroup {
         name: "Default".to_string(),
         members,
         temp_source,
-        curve: CurveSpec {
-            points,
-            min_pwm_pct: 0,
-            max_pwm_pct: 100,
-            floor_pwm_pct: 0,
-            hysteresis_pct: 5,
-            write_min_delta: 5,
-            apply_delay_ms: 0,
-        },
+        curve,
     };
 
     let cfg = CurvesConfig { version: 1, groups: vec![group.clone()] };
@@ -1455,62 +1563,6 @@ pub fn save_curve(app: &mut App) {
     app.show_curve_popup = false;
 }
 
-// Convenience: create a curve group from the currently selected controller group
-pub fn editor_add_group_from_current_controller_group(app: &mut App) {
-    if app.groups.is_empty() { return; }
-    let g = &app.groups[app.group_idx.min(app.groups.len() - 1)];
-    // Pick temp source from current temps selection or first
-    let temp_src = match app.temps.get(app.temps_idx) {
-        Some((s, _)) => s.clone(),
-        None => app.temps.first().map(|(s, _)| s.clone()).unwrap_or_default(),
-    };
-    let group = CurveGroup {
-        name: g.name.clone(),
-        members: g.members.clone(),
-        temp_source: temp_src,
-        curve: CurveSpec {
-            points: vec![
-                CurvePoint { temp_c: 30.0, pwm_pct: 20 },
-                CurvePoint { temp_c: 40.0, pwm_pct: 30 },
-                CurvePoint { temp_c: 50.0, pwm_pct: 50 },
-                CurvePoint { temp_c: 60.0, pwm_pct: 70 },
-                CurvePoint { temp_c: 70.0, pwm_pct: 100 },
-            ],
-            min_pwm_pct: 0, max_pwm_pct: 100, floor_pwm_pct: 0, hysteresis_pct: 5, write_min_delta: 5, apply_delay_ms: 0,
-        },
-    };
-    app.editor_groups.push(group);
-    app.editor_group_idx = app.editor_groups.len().saturating_sub(1);
-    app.editor_point_idx = 0;
-}
-
-// Convenience: create a curve group from the currently selected PWM
-pub fn editor_add_group_from_current_pwm(app: &mut App) {
-    let pwm = match app.pwms.get(app.pwms_idx) { Some((s, _)) => s.clone(), None => return };
-    let temp_src = match app.temps.get(app.temps_idx) {
-        Some((s, _)) => s.clone(),
-        None => app.temps.first().map(|(s, _)| s.clone()).unwrap_or_default(),
-    };
-    let name = format!("{} curve", pwm.split(':').last().unwrap_or("PWM"));
-    let group = CurveGroup {
-        name,
-        members: vec![pwm],
-        temp_source: temp_src,
-        curve: CurveSpec {
-            points: vec![
-                CurvePoint { temp_c: 30.0, pwm_pct: 20 },
-                CurvePoint { temp_c: 40.0, pwm_pct: 30 },
-                CurvePoint { temp_c: 50.0, pwm_pct: 50 },
-                CurvePoint { temp_c: 60.0, pwm_pct: 70 },
-                CurvePoint { temp_c: 70.0, pwm_pct: 100 },
-            ],
-            min_pwm_pct: 0, max_pwm_pct: 100, floor_pwm_pct: 0, hysteresis_pct: 5, write_min_delta: 5, apply_delay_ms: 0,
-        },
-    };
-    app.editor_groups.push(group);
-    app.editor_group_idx = app.editor_groups.len().saturating_sub(1);
-    app.editor_point_idx = 0;
-}
 
 pub fn start_auto_detect(app: &mut App) {
     // Only open the popup and await user confirmation
@@ -1529,6 +1581,237 @@ pub fn start_auto_detect(app: &mut App) {
             app.show_warning_popup = true;
         }
     }
+}
+
+pub fn save_baseline_config(app: &mut App) {
+    // Preserve existing curves and overrides if they exist, otherwise create defaults
+    let existing_cfg = crate::config::try_load_system_config().ok();
+    let existing_curves = existing_cfg.as_ref().and_then(|c| c.curves.clone());
+    let existing_overrides = existing_cfg.as_ref().map(|c| c.pwm_overrides.clone()).unwrap_or_default();
+    
+    // Use existing aliases if available, otherwise create from current sensor names
+    let mut fan_aliases = existing_cfg.as_ref().map(|c| c.fan_aliases.clone()).unwrap_or_default();
+    let mut pwm_aliases = existing_cfg.as_ref().map(|c| c.pwm_aliases.clone()).unwrap_or_default();
+    let mut temp_aliases = existing_cfg.as_ref().map(|c| c.temp_aliases.clone()).unwrap_or_default();
+    
+    // Add any new sensors that don't have aliases yet
+    for (name, _) in &app.fans {
+        if !fan_aliases.contains_key(name) {
+            if let Some((chip, label)) = name.split_once(':') {
+                fan_aliases.insert(name.clone(), format!("{}:{}", chip, label));
+            }
+        }
+    }
+    
+    for (name, _) in &app.pwms {
+        if !pwm_aliases.contains_key(name) {
+            if let Some((chip, label)) = name.split_once(':') {
+                pwm_aliases.insert(name.clone(), format!("{}:{}", chip, label));
+            }
+        }
+    }
+    
+    for (name, _) in &app.temps {
+        if !temp_aliases.contains_key(name) {
+            if let Some((chip, label)) = name.split_once(':') {
+                temp_aliases.insert(name.clone(), format!("{}:{}", chip, label));
+            }
+        }
+    }
+
+    // Use existing PWM overrides, or set defaults for new PWMs
+    let mut pwm_overrides = existing_overrides;
+    if pwm_overrides.is_empty() {
+        for (pwm_name, _) in &app.pwms {
+            pwm_overrides.insert(pwm_name.clone(), 50u8);
+        }
+    }
+
+    let saved_config = SavedConfig {
+        mappings: app.mappings
+            .iter()
+            .map(|m| crate::config::SavedMapping { fan: m.fan.clone(), pwm: m.pwm.clone() })
+            .collect(),
+        metric: app.metric,
+        curves: existing_curves,
+        fan_aliases: app.fan_aliases.clone(),
+        pwm_aliases: app.pwm_aliases.clone(),
+        temp_aliases: app.temp_aliases.clone(),
+        controller_groups: app.groups.clone(),
+        pwm_overrides,
+    };
+
+    match crate::config::write_system_config(&saved_config) {
+        Ok(()) => {
+            app.status = format!("Saved configuration with {} mappings to /etc/hyperfan/profile.json", 
+                               app.mappings.len());
+            app.show_save_config_prompt = false;
+            
+            // Now proceed to show curve editor
+            toggle_curve_editor_after_save(app);
+        }
+        Err(e) => {
+            app.status = format!("Failed to save config: {}", e);
+        }
+    }
+}
+
+pub fn cancel_save_config_prompt(app: &mut App) {
+    app.show_save_config_prompt = false;
+    app.show_curve_editor = false;
+    app.status = "Configuration save cancelled. Create mappings first or run auto-detect.".to_string();
+}
+
+fn create_stub_curves_from_mappings(app: &mut App, _mapped_pwms: &std::collections::HashSet<String>) {
+    // Create default curve groups from CONTROL mappings and save to curves.json
+    app.editor_groups.clear();
+    
+    if !app.mappings.is_empty() {
+        let temp_source = if !app.temps.is_empty() {
+            app.temps[0].0.clone()
+        } else {
+            "temp0".to_string()
+        };
+
+        let mut default_curve = CurveSpec::new();
+        default_curve.points = vec![
+            CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+            CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+            CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+            CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+        ];
+        default_curve.apply_delay_ms = 1000;
+        default_curve.sync_pairs_from_points();
+
+        // Create individual groups for each mapping
+        for mapping in &app.mappings {
+            let fan_name = mapping.fan.split(':').last().unwrap_or(&mapping.fan);
+            app.editor_groups.push(CurveGroup {
+                name: fan_name.to_string(),
+                members: vec![mapping.pwm.clone()],
+                temp_source: temp_source.clone(),
+                curve: default_curve.clone(),
+            });
+        }
+
+        // Save the stub curves to curves.json
+        let curves_config = CurvesConfig {
+            version: 1,
+            groups: app.editor_groups.clone(),
+        };
+
+        match curves::write_curves(&curves_config) {
+            Ok(()) => {
+                app.status = format!("Created {} stub curve groups and saved to curves.json", app.editor_groups.len());
+            }
+            Err(e) => {
+                app.status = format!("Created {} stub curve groups but failed to save: {}", app.editor_groups.len(), e);
+            }
+        }
+    }
+    
+    app.editor_group_idx = 0;
+    app.editor_point_idx = 0;
+}
+
+fn toggle_curve_editor_after_save(app: &mut App) {
+    // Continue with curve editor logic after saving config
+    app.editor_focus_right = false;
+    
+    // Get the set of PWMs that are actually mapped in CONTROL section
+    let _mapped_pwms: std::collections::HashSet<String> = app.mappings
+        .iter()
+        .map(|m| m.pwm.clone())
+        .collect();
+
+    // Since we just saved a fresh config, create default groups for all mappings
+    app.editor_groups.clear();
+    
+    if !app.mappings.is_empty() {
+        let temp_source = if !app.temps.is_empty() {
+            app.temps[0].0.clone()
+        } else {
+            "temp0".to_string()
+        };
+
+        let mut default_curve = CurveSpec::new();
+        default_curve.points = vec![
+            CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+            CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+            CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+            CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+        ];
+        default_curve.apply_delay_ms = 1000;
+        default_curve.sync_pairs_from_points();
+
+        // Create individual groups for each mapping
+        for mapping in &app.mappings {
+            let fan_name = mapping.fan.split(':').last().unwrap_or(&mapping.fan);
+            app.editor_groups.push(CurveGroup {
+                name: fan_name.to_string(),
+                members: vec![mapping.pwm.clone()],
+                temp_source: temp_source.clone(),
+                curve: default_curve.clone(),
+            });
+        }
+    }
+    
+    app.editor_group_idx = 0;
+    app.editor_point_idx = 0;
+    app.status = format!("Created {} default curve groups. Edit curves and save when ready.", app.editor_groups.len());
+}
+
+pub fn save_auto_detect_results(app: &mut App) {
+    // Save the auto-detect results to mappings and create profile.json
+    let results = match app.auto_detect_results.lock() {
+        Ok(guard) => guard.clone(),
+        Err(poisoned) => {
+            app.warning_message = "Auto-detect: recovered from corrupted results lock".to_string();
+            app.show_warning_popup = true;
+            poisoned.into_inner().clone()
+        }
+    };
+
+    if !results.is_empty() {
+        // Convert results to mappings
+        app.mappings = results
+            .into_iter()
+            .map(|p| Mapping {
+                fan: format!("{}:{}", p.fan_chip, p.fan_label),
+                pwm: format!("{}:{}", p.pwm_chip, p.pwm_label),
+            })
+            .collect();
+
+        // Save to profile.json
+        let saved_config = SavedConfig {
+            mappings: app.mappings
+                .iter()
+                .map(|m| crate::config::SavedMapping { fan: m.fan.clone(), pwm: m.pwm.clone() })
+                .collect(),
+            metric: app.metric,
+            curves: None,
+            fan_aliases: std::collections::HashMap::new(),
+            pwm_aliases: std::collections::HashMap::new(),
+            temp_aliases: std::collections::HashMap::new(),
+            controller_groups: Vec::new(),
+            pwm_overrides: std::collections::HashMap::new(),
+        };
+
+        match crate::config::write_system_config(&saved_config) {
+            Ok(()) => {
+                app.status = format!("Saved {} fan mappings to profile.json", app.mappings.len());
+            }
+            Err(e) => {
+                app.status = format!("Failed to save mappings: {}", e);
+            }
+        }
+    } else {
+        app.status = "No auto-detect results to save".to_string();
+    }
+
+    // Close the auto-detect popup
+    app.show_auto_detect = false;
+    app.auto_detect_await_confirm = false;
 }
 
 pub fn confirm_auto_detect(app: &mut App) {

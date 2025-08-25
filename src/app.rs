@@ -28,6 +28,13 @@ use crate::curves::CurveGroup;
 use crate::config::ControllerGroup as SavedControllerGroup;
 use crate::system::{read_cpu_name, read_mb_name};
 
+#[derive(Clone, Debug)]
+pub struct PwmSmoothingState {
+    pub current_value: u8,
+    pub target_value: u8,
+    pub last_update: Instant,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Focus {
     Fans,
@@ -90,10 +97,9 @@ pub struct App {
     // curve editor: track unsaved changes and save confirmation popup
     pub editor_dirty: bool,
     pub show_editor_save_confirm: bool,
+    pub show_save_config_prompt: bool,
     // selected point index inside current group
     pub editor_point_idx: usize,
-    pub editor_temp_idx: usize, // candidate temp index from self.temps
-    pub editor_pwm_idx: usize,  // candidate pwm index from self.pwms
     // curve editor: bar-graph mode (0..100°C bins)
     pub editor_graph_mode: bool,
     pub editor_graph: [u8; 101], // pwm% for each integer °C
@@ -131,6 +137,8 @@ pub struct App {
     // Groups: map PWM->FAN popup
     pub show_map_pwm_popup: bool,
     pub map_fan_idx: usize,
+    // PWM smoothing state
+    pub pwm_smoothing_state: HashMap<String, PwmSmoothingState>,
 }
 
 impl App {
@@ -176,9 +184,8 @@ impl App {
             editor_focus_right: false,
             editor_dirty: false,
             show_editor_save_confirm: false,
+            show_save_config_prompt: false,
             editor_point_idx: 0,
-            editor_temp_idx: 0,
-            editor_pwm_idx: 0,
             editor_graph_mode: false,
             editor_graph: [0; 101],
             editor_graph_sel: 40,
@@ -207,6 +214,7 @@ impl App {
             group_rename_mode: false,
             show_map_pwm_popup: false,
             map_fan_idx: 0,
+            pwm_smoothing_state: HashMap::new(),
         };
         if let Ok(saved) = try_load_system_config() {
             app.mappings = saved
@@ -224,7 +232,7 @@ impl App {
             if let Some(curves_cfg) = saved.curves {
                 app.editor_groups = curves_cfg.groups;
                 // Apply curves immediately on startup
-                crate::handlers::apply_curves_to_hardware(&app);
+                crate::handlers::apply_curves_to_hardware(&mut app);
             }
         } else if let Some(saved) = load_saved_config() {
             app.mappings = saved
