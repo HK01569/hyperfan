@@ -333,9 +333,18 @@ pub fn toggle_curve_editor(app: &mut App) {
             .iter()
             .map(|m| m.pwm.clone())
             .collect();
+        
+        // Debug: show what mappings we have
+        app.status = format!("Debug: {} mappings, PWMs: {:?}", app.mappings.len(), mapped_pwms);
 
         if let Ok(saved) = crate::config::try_load_system_config() {
             if let Some(curves_cfg) = saved.curves {
+                // Debug: show what curve groups we found
+                let group_info: Vec<String> = curves_cfg.groups.iter()
+                    .map(|g| format!("'{}': {:?}", g.name, g.members))
+                    .collect();
+                app.status = format!("Debug: {} groups found: {}", curves_cfg.groups.len(), group_info.join(", "));
+                
                 // Filter groups to only include those with members that are actually mapped
                 app.editor_groups = curves_cfg.groups
                     .into_iter()
@@ -376,8 +385,66 @@ pub fn toggle_curve_editor(app: &mut App) {
             app.editor_group_idx = 0;
             app.editor_point_idx = 0;
         }
-        // Only create a default group if there are no existing groups and no mappings
-        if app.mappings.is_empty() && app.editor_groups.is_empty() {
+        // Create default groups for any mappings that don't have curve groups
+        if !app.mappings.is_empty() && app.editor_groups.is_empty() {
+            // No existing curve groups but we have mappings - create default groups
+            let temp_source = if !app.temps.is_empty() {
+                app.temps[0].0.clone()
+            } else {
+                "temp0".to_string()
+            };
+
+            // Group PWMs by chip to reduce the number of groups
+            let mut chip_groups: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            
+            for mapping in &app.mappings {
+                if let Some((chip, _)) = parse_chip_and_label(&mapping.pwm) {
+                    chip_groups.entry(chip).or_default().push(mapping.pwm.clone());
+                } else {
+                    chip_groups.entry("misc".to_string()).or_default().push(mapping.pwm.clone());
+                }
+            }
+
+            let default_curve = crate::curves::CurveSpec {
+                points: vec![
+                    crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
+                    crate::curves::CurvePoint { temp_c: 50.0, pwm_pct: 40 },
+                    crate::curves::CurvePoint { temp_c: 70.0, pwm_pct: 80 },
+                    crate::curves::CurvePoint { temp_c: 80.0, pwm_pct: 100 },
+                ],
+                min_pwm_pct: 0,
+                max_pwm_pct: 100,
+                floor_pwm_pct: 0,
+                hysteresis_pct: 5,
+                write_min_delta: 5,
+                apply_delay_ms: 1000,
+            };
+
+            for (chip, pwm_list) in chip_groups {
+                if pwm_list.len() == 1 {
+                    let pwm = &pwm_list[0];
+                    let group_name = app.pwm_aliases.get(pwm)
+                        .cloned()
+                        .unwrap_or_else(|| pwm.clone());
+                    
+                    app.editor_groups.push(crate::curves::CurveGroup {
+                        name: format!("Auto: {}", group_name),
+                        members: pwm_list,
+                        temp_source: temp_source.clone(),
+                        curve: default_curve.clone(),
+                    });
+                } else {
+                    app.editor_groups.push(crate::curves::CurveGroup {
+                        name: format!("Auto: {} ({} fans)", chip, pwm_list.len()),
+                        members: pwm_list,
+                        temp_source: temp_source.clone(),
+                        curve: default_curve.clone(),
+                    });
+                }
+            }
+            
+            app.status = format!("Created {} default curve groups for mappings", app.editor_groups.len());
+        } else if app.mappings.is_empty() && app.editor_groups.is_empty() {
             editor_add_group(app);
         }
         // Ensure selection indices are in range

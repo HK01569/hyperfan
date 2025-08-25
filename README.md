@@ -1,5 +1,5 @@
 # WARNING
-hyperfan is in alpha at this time. Make sure you take precautions to avoid damage to your hardware. Feedback, bug reports and feature requests are welcome thank you. If you run --ec-dump and want to contribute that file, please open an issue.
+hyperfan is in alpha at this time. Make sure you take precautions to avoid damage to your hardware. Feedback, bug reports and feature requests are welcome thank you. If you run --dump-ec and want to contribute that file, please open an issue.
 
 Cheers!
 
