@@ -394,17 +394,6 @@ pub fn toggle_curve_editor(app: &mut App) {
                 "temp0".to_string()
             };
 
-            // Group PWMs by chip to reduce the number of groups
-            let mut chip_groups: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-            
-            for mapping in &app.mappings {
-                if let Some((chip, _)) = parse_chip_and_label(&mapping.pwm) {
-                    chip_groups.entry(chip).or_default().push(mapping.pwm.clone());
-                } else {
-                    chip_groups.entry("misc".to_string()).or_default().push(mapping.pwm.clone());
-                }
-            }
-
             let default_curve = crate::curves::CurveSpec {
                 points: vec![
                     crate::curves::CurvePoint { temp_c: 30.0, pwm_pct: 20 },
@@ -420,27 +409,21 @@ pub fn toggle_curve_editor(app: &mut App) {
                 apply_delay_ms: 1000,
             };
 
-            for (chip, pwm_list) in chip_groups {
-                if pwm_list.len() == 1 {
-                    let pwm = &pwm_list[0];
-                    let group_name = app.pwm_aliases.get(pwm)
-                        .cloned()
-                        .unwrap_or_else(|| pwm.clone());
-                    
-                    app.editor_groups.push(crate::curves::CurveGroup {
-                        name: format!("Auto: {}", group_name),
-                        members: pwm_list,
-                        temp_source: temp_source.clone(),
-                        curve: default_curve.clone(),
-                    });
-                } else {
-                    app.editor_groups.push(crate::curves::CurveGroup {
-                        name: format!("Auto: {} ({} fans)", chip, pwm_list.len()),
-                        members: pwm_list,
-                        temp_source: temp_source.clone(),
-                        curve: default_curve.clone(),
-                    });
-                }
+            // Create individual curve groups for each mapping
+            for mapping in &app.mappings {
+                let fan_name = app.fan_aliases.get(&mapping.fan)
+                    .cloned()
+                    .unwrap_or_else(|| mapping.fan.clone());
+                let pwm_name = app.pwm_aliases.get(&mapping.pwm)
+                    .cloned()
+                    .unwrap_or_else(|| mapping.pwm.clone());
+                
+                app.editor_groups.push(crate::curves::CurveGroup {
+                    name: format!("{} → {}", fan_name, pwm_name),
+                    members: vec![mapping.pwm.clone()],
+                    temp_source: temp_source.clone(),
+                    curve: default_curve.clone(),
+                });
             }
             
             app.status = format!("Created {} default curve groups for mappings", app.editor_groups.len());
