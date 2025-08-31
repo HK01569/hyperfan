@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "package": {
+    "productName": "Hyperfan",
+    "version": "0.1.0"
+  },
+  "build": {
+    "beforeDevCommand": "npm run build",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "../dist",
+    "distDir": "../dist"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "com.hyperfan.app",
+      "targets": "deb",
+      "icon": [
+        "icons/icon.png"
+      ]
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Hyperfan",
+        "width": 1100,
+        "height": 720,
+        "resizable": true
+      }
+    ]
+  }
+}

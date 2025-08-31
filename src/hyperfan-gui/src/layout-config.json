@@ -1,0 +1,226 @@
+{
+  "app": {
+    "name": "HyperFan",
+    "icon": "fan",
+    "theme": {
+      "primaryColor": "#3b82f6",
+      "background": "#111827",
+      "card": "#1f2937",
+      "text": "#f9fafb"
+    }
+  },
+  "header": {
+    "left": [
+      { "type": "icon-button", "icon": "arrow_back" },
+      { "type": "app-icon", "icon": "fan" },
+      { "type": "title", "text": "HyperFan" }
+    ],
+    "right": [
+      { "type": "icon-button", "icon": "visibility", "tooltip": "Toggle visibility" },
+      { "type": "icon-button", "icon": "more_vert", "tooltip": "Menu" }
+    ],
+    "heightPx": 56
+  },
+  "sidebar": {
+    "widthPx": 84,
+    "items": [
+      { "id": "home", "icon": "home", "label": "Home", "active": true },
+      { "id": "curves", "icon": "trending_up", "label": "Curves" },
+      { "id": "sensors", "icon": "thermostat", "label": "Sensors" },
+      { "id": "profiles", "icon": "bookmark", "label": "Profiles" },
+      { "id": "settings", "icon": "settings", "label": "Settings" }
+    ]
+  },
+  "main": {
+    "containerPaddingPx": 16,
+    "grid": { "columns": 12, "gutterPx": 16, "rowHeightPx": 220 },
+    "sections": [
+      {
+        "id": "controls",
+        "title": "Fan Controls",
+        "badges": [{ "text": "Active", "context": "Controls title" }],
+        "cards": [
+          {
+            "id": "control_cpu_fan",
+            "type": "fan-control",
+            "title": "CPU Fan",
+            "curve": "CPU Curve",
+            "statusBadge": "Auto",
+            "readouts": { "percent": "45%", "rpm": "1250 RPM" },
+            "temperatureSource": {
+              "selected": "cpu_package",
+              "available": [
+                { "id": "cpu_package", "label": "CPU Package", "currentTemp": "42.5°C" },
+                { "id": "cpu_cores", "label": "CPU Cores", "currentTemp": "45.2°C" },
+                { "id": "cpu_socket", "label": "CPU Socket", "currentTemp": "38.7°C" },
+                { "id": "motherboard", "label": "Motherboard", "currentTemp": "35.2°C" }
+              ]
+            },
+            "hysteresis": {
+              "value": 3,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "tuning": {
+              "stepUp": "5%/sec",
+              "stepDown": "2%/sec",
+              "startPercent": "20%",
+              "stopPercent": "10%",
+              "offset": "0%",
+              "minimumPercent": "20%"
+            },
+            "actionsMenu": true,
+            "position": { "row": 1, "col": 1, "w": 3, "h": 1 }
+          },
+          {
+            "id": "control_case_front",
+            "type": "fan-control",
+            "title": "Case Front",
+            "curve": "Case Curve",
+            "statusBadge": "Manual",
+            "controls": [
+              { "type": "slider", "value": "60%" },
+              { "type": "toggle", "value": "on" }
+            ],
+            "readouts": { "percent": "60%", "rpm": "980 RPM" },
+            "temperatureSource": {
+              "selected": "cpu_package",
+              "available": [
+                { "id": "cpu_package", "label": "CPU Package", "currentTemp": "42.5°C" },
+                { "id": "gpu_core", "label": "GPU Core", "currentTemp": "38.0°C" },
+                { "id": "motherboard", "label": "Motherboard", "currentTemp": "35.2°C" },
+                { "id": "case_ambient", "label": "Case Ambient", "currentTemp": "31.5°C" }
+              ]
+            },
+            "hysteresis": {
+              "value": 2,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "tuning": {
+              "stepUp": "3%/sec",
+              "stepDown": "1%/sec",
+              "startPercent": "15%",
+              "stopPercent": "5%",
+              "offset": "0%",
+              "minimumPercent": "15%"
+            },
+            "actionsMenu": true,
+            "position": { "row": 1, "col": 4, "w": 3, "h": 1 }
+          },
+          {
+            "id": "control_case_rear",
+            "type": "fan-control",
+            "title": "Case Rear",
+            "curve": "Case Curve",
+            "statusBadge": "Auto",
+            "readouts": { "percent": "55%", "rpm": "1100 RPM" },
+            "temperatureSource": {
+              "selected": "gpu_core",
+              "available": [
+                { "id": "gpu_core", "label": "GPU Core", "currentTemp": "38.0°C" },
+                { "id": "cpu_package", "label": "CPU Package", "currentTemp": "42.5°C" },
+                { "id": "motherboard", "label": "Motherboard", "currentTemp": "35.2°C" },
+                { "id": "case_ambient", "label": "Case Ambient", "currentTemp": "31.5°C" }
+              ]
+            },
+            "hysteresis": {
+              "value": 3,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "tuning": {
+              "stepUp": "4%/sec",
+              "stepDown": "2%/sec",
+              "startPercent": "25%",
+              "stopPercent": "15%",
+              "offset": "0%",
+              "minimumPercent": "25%"
+            },
+            "actionsMenu": true,
+            "position": { "row": 1, "col": 7, "w": 3, "h": 1 }
+          },
+          {
+            "id": "control_gpu_fan",
+            "type": "fan-control",
+            "title": "GPU Fan",
+            "curve": "GPU Curve",
+            "statusBadge": "Calibrated",
+            "readouts": { "percent": "0%", "rpm": "0 RPM" },
+            "temperatureSource": {
+              "selected": "gpu_core",
+              "available": [
+                { "id": "gpu_core", "label": "GPU Core", "currentTemp": "38.0°C" },
+                { "id": "gpu_hotspot", "label": "GPU Hotspot", "currentTemp": "45.2°C" },
+                { "id": "gpu_memory", "label": "GPU Memory", "currentTemp": "42.7°C" },
+                { "id": "case_ambient", "label": "Case Ambient", "currentTemp": "31.5°C" }
+              ]
+            },
+            "hysteresis": {
+              "value": 5,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "actionsMenu": true,
+            "position": { "row": 1, "col": 10, "w": 3, "h": 1 }
+          }
+        ]
+      },
+      {
+        "id": "curves",
+        "title": "Temperature Curves",
+        "cards": [
+          {
+            "id": "curve_cpu",
+            "type": "curve-card",
+            "title": "CPU Curve",
+            "temperatureSource": "42.5 °C - CPU Package - AMD Ryzen",
+            "graph": {
+              "xAxis": "Temperature (°C)",
+              "yAxis": "Fan speed (RPM)",
+              "series": [{ "label": "CPU Curve", "style": "line", "trend": "rising" }]
+            },
+            "readouts": { "rpm": "1250 RPM" },
+            "cta": "Edit",
+            "position": { "row": 2, "col": 1, "w": 4, "h": 1 }
+          },
+          {
+            "id": "curve_gpu",
+            "type": "curve-card",
+            "title": "GPU Curve",
+            "temperatureSource": "38 °C - GPU Core - NVIDIA RTX",
+            "graph": {
+              "xAxis": "Temperature (°C)",
+              "yAxis": "Fan speed (%)",
+              "series": [{ "label": "GPU Curve", "style": "line", "trend": "rising-from-zero" }]
+            },
+            "readouts": { "percent": "0%" },
+            "cta": "Edit",
+            "position": { "row": 2, "col": 5, "w": 4, "h": 1 }
+          },
+          {
+            "id": "curve_hybrid",
+            "type": "mixer-card",
+            "title": "Hybrid Control",
+            "function": "Average",
+            "mixing": {
+              "availableFanCurves": ["Temperature", "Load Threshold"],
+              "active": ["Temperature", "Load Threshold"]
+            },
+            "readouts": { "percent": "45%" },
+            "position": { "row": 2, "col": 9, "w": 4, "h": 1 }
+          }
+        ]
+      }
+    ]
+  },
+  "assumptions": [
+    "Layout designed for HyperFan with 12-column grid system",
+    "Fan control cards include PWM mapping and tuning parameters",
+    "Temperature curves support both direct control and mixer functions"
+  ]
+}
