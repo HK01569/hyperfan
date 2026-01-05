@@ -581,11 +581,16 @@ pub async fn load_config(state: &FanControlState) -> Result<(), String> {
                 let curve_point_structs: Vec<CurvePoint> = curve_points.iter()
                     .map(|(temp, percent)| CurvePoint { temperature: *temp, fan_percent: *percent })
                     .collect();
+                // Check if stepped mode is enabled via graph_style setting
+                // (use already-loaded settings to avoid redundant disk I/O)
+                let stepped = settings.display.graph_style == "stepped";
+                
                 let curve_engine = FanCurve::new(curve_point_structs)
                     .with_hysteresis(curve.hysteresis)
                     .with_smoothing(hf_core::constants::curve::DEFAULT_SMOOTHING_FACTOR)
                     .with_delay(curve.delay_ms)
-                    .with_ramp_speeds(curve.ramp_up_speed, curve.ramp_down_speed);
+                    .with_ramp_speeds(curve.ramp_up_speed, curve.ramp_down_speed)
+                    .with_stepped(stepped);
                 
                 let runtime = ControlPairRuntime {
                     pair: control_pair,

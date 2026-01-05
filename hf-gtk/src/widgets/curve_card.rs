@@ -626,6 +626,9 @@ impl CurveCard {
             return 100.0;
         }
 
+        let graph_style = hf_core::get_graph_style();
+        let stepped = graph_style == "stepped";
+
         if temp <= points[0].0 {
             return points[0].1;
         }
@@ -643,6 +646,11 @@ impl CurveCard {
             let (t2, p2) = window[1];
 
             if temp >= t1 && temp <= t2 {
+                // Stepped mode: use lower point's fan speed until we reach the next point
+                if stepped {
+                    return p1;
+                }
+
                 let denom = t2 - t1;
                 // Protect against division by zero for overlapping points
                 if denom.abs() < f32::EPSILON {

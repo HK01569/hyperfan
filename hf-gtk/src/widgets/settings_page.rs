@@ -1014,6 +1014,13 @@ impl SettingsPage {
             let new_backend = settings_to_save.display.display_backend.clone();
             let backend_changed = current_backend != new_backend;
             
+            // Check if graph_style changed - need to reload daemon for stepped mode
+            let current_graph_style = hf_core::load_settings()
+                .map(|s| s.display.graph_style)
+                .unwrap_or_else(|_| "filled".to_string());
+            let new_graph_style = settings_to_save.display.graph_style.clone();
+            let graph_style_changed = current_graph_style != new_graph_style;
+            
             // Save all settings at once
             if let Err(e) = hf_core::save_settings(&settings_to_save) {
                 error!("Failed to save settings: {}", e);
@@ -1055,6 +1062,14 @@ impl SettingsPage {
                     info!("Display backend changed to {}, restarting...", new_backend);
                 }
                 Self::restart_application();
+            }
+            
+            // Reload daemon if graph_style changed (affects stepped fan control mode)
+            if graph_style_changed {
+                info!("Graph style changed to {}, reloading daemon config...", new_graph_style);
+                if let Err(e) = hf_core::daemon_reload_config() {
+                    warn!("Could not reload daemon config (daemon may not be running): {}", e);
+                }
             }
             
             // Mark as clean and reset button

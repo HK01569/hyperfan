@@ -1508,6 +1508,9 @@ impl AddPairDialog {
             return dialog_constants::fan_speed::MAX_PERCENT;
         }
 
+        let graph_style = hf_core::get_graph_style();
+        let stepped = graph_style == "stepped";
+
         if temp <= points[0].0 {
             return points[0].1;
         }
@@ -1524,6 +1527,10 @@ impl AddPairDialog {
             let (t1, p1) = window[0];
             let (t2, p2) = window[1];
             if temp >= t1 && temp <= t2 {
+                // Stepped mode: use lower point's fan speed until we reach the next point
+                if stepped {
+                    return p1;
+                }
                 let ratio = (temp - t1) / (t2 - t1);
                 return p1 + ratio * (p2 - p1);
             }

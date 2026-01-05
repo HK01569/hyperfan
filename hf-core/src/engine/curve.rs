@@ -36,6 +36,8 @@ pub struct FanCurve {
     ramp_down_speed: f32,
     /// Pending target during delay period
     pending_target: Option<(f32, Instant)>,
+    /// Stepped mode: jump instantly to next curve point instead of interpolating
+    stepped: bool,
 }
 
 impl FanCurve {
@@ -55,7 +57,14 @@ impl FanCurve {
             ramp_up_speed: curve_const::DEFAULT_RAMP_UP_SPEED,
             ramp_down_speed: curve_const::DEFAULT_RAMP_DOWN_SPEED,
             pending_target: None,
+            stepped: false,
         }
+    }
+
+    /// Enable stepped mode (jump instantly between curve points instead of interpolating)
+    pub fn with_stepped(mut self, stepped: bool) -> Self {
+        self.stepped = stepped;
+        self
     }
 
     /// Create a curve with custom hysteresis (minimum temperature change to trigger adjustment)
@@ -305,6 +314,11 @@ impl FanCurve {
             let upper_point = &window[1];
 
             if current_temp >= lower_point.temperature && current_temp <= upper_point.temperature {
+                // Stepped mode: use the lower point's fan speed until we reach the next point
+                if self.stepped {
+                    return lower_point.fan_percent;
+                }
+
                 let temp_range = upper_point.temperature - lower_point.temperature;
 
                 // Avoid division by zero for overlapping points
