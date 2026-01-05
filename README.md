@@ -1,5 +1,8 @@
 # Donation request!
-I need an Intel ARC GPU to validate hyperfan against real hardware. can you help? See my Kofi link or get in touch. THANK YOU!
+I need an Intel ARC GPU to validate hyperfan against real hardware. can you help? If you'd like to donate, see my Kofi link. If you have an ARC GPU and wish to test, you'll be added to my list of testers.
+
+Thank you!!!
+
 
 # Hyperfan
 Fan control platform for Linux enthusiasts who demand precise thermal management, written in Rust!
@@ -30,7 +33,7 @@ EC control is exceptionaly early in its development, and should not be used for 
 ### Comprehensive GPU Support
 - NVIDIA: Full control via nvidia-smi and nvidia-settings
 - AMD: Complete amdgpu sysfs integration (VRAM, power, multi-fan)
-- Intel: i915/xe hwmon monitoring and discrete GPU control
+- Intel: i915/xe hwmon monitoring and discrete GPU control (REQUIRES VALIDATION!!!)
 - Multi-GPU systems fully supported
 - Per-GPU, per-fan control
 
