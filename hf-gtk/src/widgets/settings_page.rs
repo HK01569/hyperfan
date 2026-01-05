@@ -141,11 +141,26 @@ impl SettingsPage {
             .title("Licensing")
             .build();
 
-        // License
+        // License - clickable to show full license text
         let license_row = adw::ActionRow::builder()
             .title("License")
             .subtitle("GPL-3.0-or-later")
+            .activatable(true)
             .build();
+
+        let license_btn = Button::builder()
+            .icon_name("go-next-symbolic")
+            .valign(gtk4::Align::Center)
+            .tooltip_text("View full license")
+            .css_classes(["flat"])
+            .build();
+        license_row.add_suffix(&license_btn);
+        license_row.set_activatable_widget(Some(&license_btn));
+
+        license_btn.connect_clicked(move |btn| {
+            Self::show_license_dialog(btn);
+        });
+
         licensing_group.add(&license_row);
 
         // Free, Open Source Software - clickable to show dependencies
@@ -1601,6 +1616,107 @@ impl SettingsPage {
         Ok(())
     }
     
+    /// Show full GPL-3.0+ license dialog
+    fn show_license_dialog(btn: &Button) {
+        let dialog = adw::Dialog::builder()
+            .title("GNU General Public License v3.0")
+            .content_width(700)
+            .content_height(600)
+            .build();
+
+        let content = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .build();
+
+        let header = adw::HeaderBar::builder()
+            .show_end_title_buttons(true)
+            .build();
+
+        // Copy license button
+        let license_text_static: &'static str = include_str!("../../../LICENSE.md");
+        let copy_btn = Button::builder()
+            .icon_name("edit-copy-symbolic")
+            .tooltip_text("Copy license text")
+            .build();
+        copy_btn.connect_clicked(move |btn| {
+            let clipboard = btn.clipboard();
+            clipboard.set_text(license_text_static);
+        });
+        header.pack_start(&copy_btn);
+
+        // FSF website button
+        let fsf_btn = Button::builder()
+            .icon_name("external-link-symbolic")
+            .tooltip_text("Visit FSF website")
+            .build();
+        let dialog_weak = dialog.downgrade();
+        fsf_btn.connect_clicked(move |_| {
+            Self::show_fsf_warning(&dialog_weak);
+        });
+        header.pack_start(&fsf_btn);
+
+        content.append(&header);
+
+        // Scroll window flush to edges (no margins)
+        let scroll = ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .build();
+
+        // Inner box for padding on the text content only
+        let text_box = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .margin_start(18)
+            .margin_end(18)
+            .margin_top(12)
+            .margin_bottom(18)
+            .build();
+
+        let label = Label::builder()
+            .label(license_text_static)
+            .selectable(true)
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["monospace"])
+            .build();
+
+        // Prevent auto-selection on dialog open
+        label.select_region(0, 0);
+
+        text_box.append(&label);
+        scroll.set_child(Some(&text_box));
+        content.append(&scroll);
+
+        dialog.set_child(Some(&content));
+        dialog.present(Some(btn));
+    }
+
+    /// Show FSF website warning dialog
+    fn show_fsf_warning(parent: &glib::WeakRef<adw::Dialog>) {
+        let warning = adw::AlertDialog::builder()
+            .heading("Open External Website")
+            .body("You are about to be taken to the Free Software Foundation website:\n\nhttps://www.fsf.org\n\nDo you want to continue?")
+            .build();
+
+        warning.add_response("cancel", "Cancel");
+        warning.add_response("open", "Open Website");
+        warning.set_response_appearance("open", adw::ResponseAppearance::Suggested);
+        warning.set_default_response(Some("cancel"));
+        warning.set_close_response("cancel");
+
+        warning.connect_response(None, |_, response| {
+            if response == "open" {
+                if let Err(e) = open::that("https://www.fsf.org") {
+                    error!("Failed to open FSF website: {}", e);
+                }
+            }
+        });
+
+        if let Some(dialog) = parent.upgrade() {
+            warning.present(Some(&dialog));
+        }
+    }
+
     /// Show FOSS dependencies dialog
     fn show_foss_dialog(btn: &Button) {
         let dialog = adw::Dialog::builder()
