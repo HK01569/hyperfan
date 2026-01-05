@@ -156,11 +156,12 @@ impl SettingsPage {
             .build();
 
         let foss_btn = Button::builder()
-            .icon_name("application-x-addon-symbolic")
+            .icon_name("go-next-symbolic")
             .valign(gtk4::Align::Center)
             .tooltip_text("View dependencies")
             .css_classes(["flat"])
             .build();
+        foss_row.add_suffix(&foss_btn);
         foss_row.set_activatable_widget(Some(&foss_btn));
 
         foss_btn.connect_clicked(move |btn| {
@@ -1612,10 +1613,41 @@ impl SettingsPage {
             .orientation(Orientation::Vertical)
             .build();
 
-        // Header bar
+        // Header bar with export menu
         let header = adw::HeaderBar::builder()
             .show_end_title_buttons(true)
             .build();
+
+        // Export menu button (top left)
+        let export_menu = gio::Menu::new();
+        export_menu.append(Some("Export as CSV"), Some("foss.export-csv"));
+        export_menu.append(Some("Export as JSON"), Some("foss.export-json"));
+
+        let export_btn = gtk4::MenuButton::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Export dependencies")
+            .menu_model(&export_menu)
+            .build();
+        header.pack_start(&export_btn);
+
+        // Create action group for export actions
+        let action_group = gio::SimpleActionGroup::new();
+
+        // CSV export action
+        let csv_action = gio::SimpleAction::new("export-csv", None);
+        csv_action.connect_activate(|_, _| {
+            Self::export_foss_csv();
+        });
+        action_group.add_action(&csv_action);
+
+        // JSON export action
+        let json_action = gio::SimpleAction::new("export-json", None);
+        json_action.connect_activate(|_, _| {
+            Self::export_foss_json();
+        });
+        action_group.add_action(&json_action);
+
+        content.insert_action_group("foss", Some(&action_group));
         content.append(&header);
 
         // Description
@@ -1645,27 +1677,7 @@ impl SettingsPage {
             .build();
 
         // All dependencies with their info
-        let dependencies: Vec<(&str, &str, &str, &str)> = vec![
-            // (name, license, author, url)
-            ("gtk4-rs", "MIT", "gtk-rs contributors", "https://github.com/gtk-rs/gtk4-rs"),
-            ("libadwaita-rs", "MIT", "gtk-rs contributors", "https://github.com/gtk-rs/gtk4-rs"),
-            ("tokio", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tokio"),
-            ("serde", "MIT OR Apache-2.0", "Erick Tryzelaar, David Tolnay", "https://github.com/serde-rs/serde"),
-            ("serde_json", "MIT OR Apache-2.0", "Erick Tryzelaar, David Tolnay", "https://github.com/serde-rs/json"),
-            ("anyhow", "MIT OR Apache-2.0", "David Tolnay", "https://github.com/dtolnay/anyhow"),
-            ("thiserror", "MIT OR Apache-2.0", "David Tolnay", "https://github.com/dtolnay/thiserror"),
-            ("tracing", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
-            ("tracing-subscriber", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
-            ("tracing-journald", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
-            ("parking_lot", "MIT OR Apache-2.0", "Amanieu d'Antras", "https://github.com/Amanieu/parking_lot"),
-            ("regex", "MIT OR Apache-2.0", "The Rust Project Developers", "https://github.com/rust-lang/regex"),
-            ("dirs", "MIT OR Apache-2.0", "Simon Ochsenreither", "https://github.com/dirs-dev/dirs-rs"),
-            ("libc", "MIT OR Apache-2.0", "The Rust Project Developers", "https://github.com/rust-lang/libc"),
-            ("open", "MIT", "Byron Rakitzis", "https://github.com/Byron/open-rs"),
-            ("ksni", "Apache-2.0", "ksni contributors", "https://github.com/ksni-rs/ksni"),
-            ("ctrlc", "MIT OR Apache-2.0", "Antti Keränen", "https://github.com/Detegr/rust-ctrlc"),
-            ("tempfile", "MIT OR Apache-2.0", "Steven Allen, The Rust Project Developers", "https://github.com/Stebalien/tempfile"),
-        ];
+        let dependencies = Self::get_foss_dependencies();
 
         for (name, license, author, url) in dependencies {
             let row = adw::ActionRow::builder()
@@ -1699,6 +1711,84 @@ impl SettingsPage {
 
         dialog.set_child(Some(&content));
         dialog.present(Some(btn));
+    }
+
+    /// Get FOSS dependencies data
+    fn get_foss_dependencies() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
+        vec![
+            // (name, license, author, url)
+            ("gtk4-rs", "MIT", "gtk-rs contributors", "https://github.com/gtk-rs/gtk4-rs"),
+            ("libadwaita-rs", "MIT", "gtk-rs contributors", "https://github.com/gtk-rs/gtk4-rs"),
+            ("tokio", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tokio"),
+            ("serde", "MIT OR Apache-2.0", "Erick Tryzelaar, David Tolnay", "https://github.com/serde-rs/serde"),
+            ("serde_json", "MIT OR Apache-2.0", "Erick Tryzelaar, David Tolnay", "https://github.com/serde-rs/json"),
+            ("anyhow", "MIT OR Apache-2.0", "David Tolnay", "https://github.com/dtolnay/anyhow"),
+            ("thiserror", "MIT OR Apache-2.0", "David Tolnay", "https://github.com/dtolnay/thiserror"),
+            ("tracing", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
+            ("tracing-subscriber", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
+            ("tracing-journald", "MIT", "Tokio Contributors", "https://github.com/tokio-rs/tracing"),
+            ("parking_lot", "MIT OR Apache-2.0", "Amanieu d'Antras", "https://github.com/Amanieu/parking_lot"),
+            ("regex", "MIT OR Apache-2.0", "The Rust Project Developers", "https://github.com/rust-lang/regex"),
+            ("dirs", "MIT OR Apache-2.0", "Simon Ochsenreither", "https://github.com/dirs-dev/dirs-rs"),
+            ("libc", "MIT OR Apache-2.0", "The Rust Project Developers", "https://github.com/rust-lang/libc"),
+            ("open", "MIT", "Byron Rakitzis", "https://github.com/Byron/open-rs"),
+            ("ksni", "Apache-2.0", "ksni contributors", "https://github.com/ksni-rs/ksni"),
+            ("ctrlc", "MIT OR Apache-2.0", "Antti Keränen", "https://github.com/Detegr/rust-ctrlc"),
+            ("clap", "MIT OR Apache-2.0", "Kevin K., Ed Page", "https://github.com/clap-rs/clap"),
+            ("uuid", "MIT OR Apache-2.0", "Ashley Mannix, Dylan DPC, Hunar Roop Kahlon", "https://github.com/uuid-rs/uuid"),
+            ("chrono", "MIT OR Apache-2.0", "Kang Seonghoon, Brandon W Maister", "https://github.com/chronotope/chrono"),
+            ("sha2", "MIT OR Apache-2.0", "RustCrypto Developers", "https://github.com/RustCrypto/hashes"),
+        ]
+    }
+
+    /// Export FOSS dependencies as CSV
+    fn export_foss_csv() {
+        let deps = Self::get_foss_dependencies();
+        let mut csv = String::from("Name,License,Author,URL\n");
+        for (name, license, author, url) in deps {
+            csv.push_str(&format!("\"{}\",\"{}\",\"{}\",\"{}\"\n", name, license, author, url));
+        }
+
+        if let Some(downloads) = dirs::download_dir() {
+            let path = downloads.join("hyperfan-dependencies.csv");
+            if let Err(e) = std::fs::write(&path, csv) {
+                error!("Failed to export CSV: {}", e);
+            } else {
+                info!("Exported dependencies to {}", path.display());
+                let _ = open::that(&path);
+            }
+        }
+    }
+
+    /// Export FOSS dependencies as JSON
+    fn export_foss_json() {
+        let deps = Self::get_foss_dependencies();
+        let json_deps: Vec<serde_json::Value> = deps
+            .iter()
+            .map(|(name, license, author, url)| {
+                serde_json::json!({
+                    "name": name,
+                    "license": license,
+                    "author": author,
+                    "url": url
+                })
+            })
+            .collect();
+
+        let json = serde_json::json!({
+            "project": "Hyperfan",
+            "dependencies": json_deps
+        });
+
+        if let Some(downloads) = dirs::download_dir() {
+            let path = downloads.join("hyperfan-dependencies.json");
+            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&json).unwrap_or_default()) {
+                error!("Failed to export JSON: {}", e);
+            } else {
+                info!("Exported dependencies to {}", path.display());
+                let _ = open::that(&path);
+            }
+        }
     }
 
     /// Show EC danger warning dialog
