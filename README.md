@@ -79,6 +79,13 @@ Hyperfan is built as a modular Rust workspace with clean separation of concerns:
 ---
 
 ## Screenshots
+![App Screenshot](images/activeControls.png)
+![App Screenshot](images/fanCurves.png)
+![App Screenshot](images/fanPairing.png)
+![App Screenshot](images/tempSensors.png)
+![App Screenshot](images/tempGraphs.png)
+![App Screenshot](images/settings.png)
+
 
 
 
@@ -119,65 +126,14 @@ git clone https://github.com/HK01569/hyperfan.git
 cd hyperfan
 
 # Build optimized release
-cargo build --release
+cargo build --workspace --release
 
 # Run the GUI
 ./target/release/hyperfan
 ```
 
 ### Install the Daemon
-
-For persistent fan control, install the privileged daemon:
-
-```bash
-# Build the daemon
-cargo build --release -p hf-daemon
-
-# Install binary
-sudo cp target/release/hyperfand /usr/local/bin/
-
-# Install and enable systemd service
-sudo cp hf-daemon/hyperfan.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now hyperfan.service
-
-# Check status
-sudo systemctl status hyperfan.service
-## Configuration
-
-Configuration files are stored in multiple locations:
-
-### System Configuration (Daemon)
-- `/etc/hyperfan/profile.json` - Active profile with fan mappings and curves
-- `/run/hyperfan/daemon.sock` - Unix socket for IPC
-
-### User Configuration (GUI)
-- `~/.config/hyperfan/settings.json` - GUI preferences and window state
-- `~/.config/hyperfan/curves/` - Saved fan curve library
-
-### Profile Format
-
-Profiles are JSON files containing fan-sensor pairings and curves:
-
-```json
-{
-  "name": "Gaming Profile",
-  "fan_mappings": [
-    {
-      "fan_path": "/sys/class/hwmon/hwmon3/pwm1",
-      "sensor_path": "/sys/class/hwmon/hwmon0/temp1_input",
-      "curve_name": "cpu_curve",
-      "hardware_id": { /* fingerprint */ }
-    }
-  ],
-  "curves": {
-    "cpu_curve": {
-      "points": [[30.0, 30.0], [60.0, 50.0], [80.0, 100.0]],
-      "smoothing": 0.3
-    }
-  }
-}
-```
+Moved in-program. To install the daemon, you will need to open hyperfan, navigate to settings, then isntall the daemon from there. You will need sudo to do this.
 
 ---
 
