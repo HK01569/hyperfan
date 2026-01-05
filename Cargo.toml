@@ -1,25 +1,13 @@
-
 [workspace]
 members = [
-  "hyperfan-core",
-  "src/hyperfan-gui/src-tauri",
+  "hf-core",
+  "hf-daemon",
+  "hf-gtk",
+  "hf-protocol",
+  "hf-error",
+  "hf-gpu",
 ]
 resolver = "2"
-
-[workspace.package]
-edition = "2021"
-license = "GPL-3.0-or-later"
-authors = ["henry kleyn"]
-description = "Hyperfan workspace (core library and Tauri GUI)"
-repository = "https://example.com/hyperfan"
-
-[workspace.dependencies]
-anyhow = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "1"
-libc = "0.2"
-lazy_static = "1.4"
 
 [profile.release]
 codegen-units = 1

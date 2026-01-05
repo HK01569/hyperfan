@@ -1,0 +1,78 @@
+/* Status & State Styles
+ * 
+ * Temperature states, loading, error, warning, and empty states.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Temperature States
+ * ================================================================ */
+.temp-hot {
+    color: @error_color;
+}
+
+.temp-warm {
+    color: @warning_color;
+}
+
+.temp-cool {
+    color: @success_color;
+}
+
+/* ================================================================
+ * Empty State
+ * ================================================================ */
+.empty-state-icon {
+    opacity: var(--hf-opacity-accessible);
+    color: @accent_color;
+}
+
+/* ================================================================
+ * Status Page
+ * ================================================================ */
+statuspage {
+    padding: var(--hf-spacing-lg);
+}
+
+statuspage > image {
+    margin-bottom: var(--hf-spacing-sm);
+}
+
+/* ================================================================
+ * Loading State
+ * ================================================================ */
+.loading {
+    opacity: var(--hf-opacity-loading);
+    pointer-events: none;
+}
+
+/* ================================================================
+ * Disabled State
+ * ================================================================ */
+*:disabled {
+    opacity: var(--hf-opacity-disabled);
+    cursor: not-allowed;
+}
+
+/* ================================================================
+ * Error State
+ * ================================================================ */
+.error {
+    color: @error_color;
+    font-weight: var(--hf-font-weight-semibold);
+}
+
+/* ================================================================
+ * Warning State
+ * ================================================================ */
+.warning {
+    color: @warning_color;
+}
+
+/* ================================================================
+ * Performance Bar
+ * ================================================================ */
+.perf-bar {
+    background-color: alpha(@view_bg_color, var(--hf-opacity-high-contrast));
+    border-top: var(--hf-border-width) solid alpha(@borders, var(--hf-opacity-background-tint));
+}

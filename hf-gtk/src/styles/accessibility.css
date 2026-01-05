@@ -1,0 +1,100 @@
+/* Accessibility Enhancements
+ * 
+ * WCAG 2.1 AA/AAA compliance features.
+ * Focus states, reduced motion, high contrast, and screen reader support.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Screen Reader Only Content
+ * ================================================================ */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* ================================================================
+ * Global Focus Indicator
+ * Only apply to interactive elements, not containers
+ * ================================================================ */
+button:focus-visible,
+entry:focus-visible,
+spinbutton:focus-visible,
+switch:focus-visible,
+checkbutton:focus-visible,
+radiobutton:focus-visible,
+scale:focus-visible,
+dropdown:focus-visible,
+comborow:focus-visible,
+row:focus-visible,
+listview:focus-visible,
+link:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset-small);
+}
+
+/* Ensure windows and dialogs don't get focus outlines */
+window:focus-visible,
+dialog:focus-visible,
+messagedialog:focus-visible,
+box:focus-visible,
+scrolledwindow:focus-visible,
+viewport:focus-visible,
+stack:focus-visible,
+overlay:focus-visible,
+revealer:focus-visible,
+clamp:focus-visible {
+    outline: none;
+}
+
+/* ================================================================
+ * Reduced Motion Support
+ * ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ================================================================
+ * High Contrast Mode Support
+ * ================================================================ */
+@media (prefers-contrast: high) {
+    button,
+    row,
+    .card {
+        border: var(--hf-border-width-thick) solid currentColor;
+    }
+    
+    button.suggested-action {
+        border: var(--hf-border-width-extra-thick) solid @accent_fg_color;
+    }
+    
+    button:focus-visible,
+    row:focus-visible,
+    .card:focus-visible,
+    entry:focus-visible {
+        outline: var(--hf-focus-width-high-contrast) solid @accent_color;
+        outline-offset: var(--hf-focus-offset-high-contrast);
+    }
+}
+
+/* ================================================================
+ * Large Text Support
+ * ================================================================ */
+@media (prefers-font-size: large) {
+    * {
+        font-size: 1.2em;
+    }
+}

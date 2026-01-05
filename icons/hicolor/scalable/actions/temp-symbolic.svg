@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Thermometer body -->
+  <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  
+  <!-- Mercury bulb (filled) -->
+  <circle cx="11.5" cy="17.5" r="2.5" fill="currentColor" stroke="none"/>
+  
+  <!-- Mercury column -->
+  <rect x="10" y="8" width="3" height="7" rx="1" fill="currentColor" stroke="none"/>
+  
+  <!-- Temperature scale marks -->
+  <line x1="14" y1="5" x2="16" y2="5" stroke="currentColor" stroke-width="1" opacity="0.6"/>
+  <line x1="14" y1="7.5" x2="15.5" y2="7.5" stroke="currentColor" stroke-width="1" opacity="0.6"/>
+  <line x1="14" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="1" opacity="0.6"/>
+  <line x1="14" y1="12.5" x2="15.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.6"/>
+</svg>

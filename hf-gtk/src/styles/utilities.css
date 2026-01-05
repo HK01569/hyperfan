@@ -1,0 +1,40 @@
+/* Utility Classes
+ * 
+ * General-purpose utility classes for common styling needs.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Accent Color Utilities
+ * ================================================================ */
+.accent {
+    color: @accent_color;
+}
+
+.accent-bg {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* ================================================================
+ * Dialog Content
+ * ================================================================ */
+.dialog-content {
+    padding: var(--hf-spacing-dialog-padding);
+}
+
+window.dialog > box {
+    padding: 0;
+}
+
+/* ================================================================
+ * Scrollbar Behavior
+ * ================================================================ */
+scrolledwindow > scrollbar {
+    opacity: 0;
+    transition: opacity var(--hf-transition-slow) var(--hf-transition-easing);
+}
+
+scrolledwindow:hover > scrollbar {
+    opacity: 1;
+}

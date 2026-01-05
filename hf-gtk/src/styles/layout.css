@@ -1,0 +1,152 @@
+/* Layout & Spacing Classes
+ * 
+ * Provides consistent spacing and layout for cards, containers, and content areas.
+ * Replaces hardcoded margin/spacing values in Rust widget code.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Card Content Layouts
+ * ================================================================ */
+
+/* Standard card content container */
+.card-content {
+    padding: var(--hf-spacing-card-padding);
+}
+
+/* Card content with smaller padding */
+.card-content-compact {
+    padding: var(--hf-spacing-sm);
+}
+
+/* Card header row */
+.card-header {
+    margin-bottom: var(--hf-spacing-sm);
+}
+
+/* ================================================================
+ * Spacing Classes
+ * ================================================================ */
+
+/* Vertical spacing between elements */
+.spacing-xs {
+    margin-bottom: var(--hf-spacing-xs);
+}
+
+.spacing-sm {
+    margin-bottom: var(--hf-spacing-sm);
+}
+
+.spacing-md {
+    margin-bottom: var(--hf-spacing-md);
+}
+
+.spacing-lg {
+    margin-bottom: var(--hf-spacing-lg);
+}
+
+/* ================================================================
+ * Stats Display Layout
+ * ================================================================ */
+
+/* Stats row container (Temperature, Fan Speed, Power, etc.) */
+.stats-row {
+    margin-top: var(--hf-spacing-sm);
+    margin-bottom: var(--hf-spacing-sm);
+}
+
+/* Individual stat box */
+.stat-box {
+    padding: var(--hf-spacing-xs);
+}
+
+/* Stat title label */
+.stat-title {
+    margin-bottom: 4px;
+}
+
+/* ================================================================
+ * Page Content Layout
+ * ================================================================ */
+
+/* Main page content container */
+.page-content {
+    padding: var(--hf-spacing-lg);
+}
+
+/* Page content with extra spacing */
+.page-content-spacious {
+    padding: var(--hf-spacing-xl);
+}
+
+/* Section within a page */
+.page-section {
+    margin-bottom: var(--hf-spacing-lg);
+}
+
+/* ================================================================
+ * Graph & Preview Sizing
+ * ================================================================ */
+
+/* Standard curve graph height */
+.graph-height-standard {
+    min-height: 120px;
+}
+
+/* Compact curve preview */
+.graph-height-compact {
+    min-height: 100px;
+}
+
+/* Mini curve thumbnail */
+.graph-height-mini {
+    min-height: 50px;
+    min-width: 80px;
+}
+
+/* ================================================================
+ * Info Card Layouts
+ * ================================================================ */
+
+/* CPU/GPU info card content */
+.info-card-content {
+    padding: var(--hf-spacing-card-padding);
+}
+
+/* Pair card in dashboard */
+.pair-card-content {
+    padding: var(--hf-spacing-sm) var(--hf-spacing-card-padding);
+}
+
+/* ================================================================
+ * Dashboard Layout
+ * ================================================================ */
+
+/* Dashboard main content area */
+.dashboard-content {
+    padding: var(--hf-spacing-lg);
+}
+
+/* Dashboard section header */
+.dashboard-section-header {
+    margin-bottom: var(--hf-spacing-xs);
+}
+
+/* Dashboard section */
+.dashboard-section {
+    margin-bottom: var(--hf-spacing-lg);
+}
+
+/* ================================================================
+ * Dialog Layout
+ * ================================================================ */
+
+/* Dialog body content */
+.dialog-body {
+    padding: var(--hf-spacing-lg);
+}
+
+/* Dialog section */
+.dialog-section {
+    margin-bottom: var(--hf-spacing-md);
+}

@@ -1,0 +1,74 @@
+/* List & Row Styles
+ * 
+ * List boxes, rows, sensor rows, and activatable rows.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Base Row Styles
+ * ================================================================ */
+row {
+    transition: all var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+row:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+/* ================================================================
+ * List Box Rows
+ * ================================================================ */
+listboxrow {
+    padding: var(--hf-spacing-list-row);
+}
+
+listboxrow:hover {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-hover));
+}
+
+/* ================================================================
+ * Activatable Rows
+ * ================================================================ */
+row.activatable:hover {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-hover));
+}
+
+row.activatable {
+    min-width: var(--hf-size-button-touch);
+    min-height: var(--hf-size-button-touch);
+}
+
+/* ================================================================
+ * Sensor Rows
+ * ================================================================ */
+.sensor-row {
+    padding: var(--hf-spacing-sensor-row);
+    border-radius: var(--hf-radius-md);
+    transition: background-color var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+.sensor-row:hover {
+    background-color: alpha(@view_bg_color, var(--hf-opacity-background-tint));
+}
+
+/* ================================================================
+ * Fan Responding Highlight
+ * ================================================================ */
+.fan-responding {
+    color: @accent_color;
+    font-weight: var(--hf-font-weight-bold);
+}
+
+row.fan-responding,
+.fan-responding-row {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-accent-active));
+}
+
+/* ================================================================
+ * Preferences Group
+ * ================================================================ */
+preferencesgroup {
+    margin-bottom: var(--hf-spacing-xs);
+}

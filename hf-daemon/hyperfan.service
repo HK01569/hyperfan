@@ -1,0 +1,30 @@
+[Unit]
+Description=Hyperfan Fan Control Daemon
+Documentation=https://github.com/hyperfan/hyperfan
+After=local-fs.target systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+# Load common SuperIO/EC modules for PWM fan control (failures are OK)
+ExecStartPre=-/sbin/modprobe nct6775
+ExecStartPre=-/sbin/modprobe it87
+ExecStartPre=-/sbin/modprobe w83627ehf
+ExecStartPre=-/sbin/modprobe f71882fg
+ExecStart=/usr/bin/hyperfand
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/sys/class/hwmon /sys/devices /run /var/lib/hyperfan
+
+# Allow hardware access
+CapabilityBoundingSet=CAP_SYS_RAWIO CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_SYS_RAWIO CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,99 @@
+/* Button Styles
+ * 
+ * All button variants and states.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Base Button Styles
+ * ================================================================ */
+
+/* Smooth transitions for all buttons */
+button {
+    transition: all var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+/* Fix button backgrounds for dark theme compatibility */
+button.flat,
+button.flat:hover,
+button.flat:active,
+button.circular.flat,
+button.circular.flat:hover,
+button.circular.flat:active {
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+}
+
+/* Touch target minimum sizes - compact */
+button:not(.window-control):not(.nav-button):not(.daemon-active) {
+    min-width: var(--hf-size-button-min);
+    min-height: var(--hf-size-button-min);
+    padding: var(--hf-spacing-button-padding);
+}
+
+/* ================================================================
+ * Circular Buttons
+ * ================================================================ */
+button.circular {
+    min-width: var(--hf-size-button-circular);
+    min-height: var(--hf-size-button-circular);
+    padding: 4px;
+    border-radius: var(--hf-radius-circular);
+}
+
+button.flat.circular {
+    min-width: var(--hf-size-button-circular);
+    min-height: var(--hf-size-button-circular);
+    padding: 4px;
+}
+
+/* ================================================================
+ * FAB (Floating Action Button) - Squircle Style
+ * ================================================================ */
+button.fab {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+    border-radius: var(--hf-radius-lg);
+}
+
+button.fab.suggested-action {
+    background: @accent_bg_color;
+    background-color: @accent_bg_color;
+    background-image: none;
+    color: @accent_fg_color;
+}
+
+/* ================================================================
+ * Pill Buttons
+ * ================================================================ */
+button.pill {
+    padding: var(--hf-spacing-button-padding-pill);
+    border-radius: var(--hf-radius-pill);
+    background: @accent_bg_color;
+    background-color: @accent_bg_color;
+    background-image: none;
+    color: @accent_fg_color;
+}
+
+/* ================================================================
+ * Suggested Action Buttons
+ * ================================================================ */
+button.suggested-action,
+button.suggested-action.pill {
+    background: @accent_bg_color;
+    background-color: @accent_bg_color;
+    background-image: none;
+    color: @accent_fg_color;
+}
+
+/* ================================================================
+ * Focus States
+ * ================================================================ */
+button:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}

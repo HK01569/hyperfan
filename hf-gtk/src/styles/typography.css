@@ -1,0 +1,58 @@
+/* Typography Styles
+ * 
+ * Text styles, headings, and font treatments.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Page Headers
+ * ================================================================ */
+.page-header {
+    padding: var(--hf-spacing-page-header);
+}
+
+.page-title {
+    font-size: var(--hf-font-size-page-title);
+    font-weight: var(--hf-font-weight-bold);
+}
+
+/* ================================================================
+ * Title Styles
+ * ================================================================ */
+.title-1 {
+    font-weight: var(--hf-font-weight-extrabold);
+}
+
+/* ================================================================
+ * Heading Styles
+ * ================================================================ */
+.heading {
+    font-weight: var(--hf-font-weight-bold);
+    font-size: var(--hf-font-size-heading);
+}
+
+/* ================================================================
+ * Numeric / Monospace Values
+ * ================================================================ */
+.numeric {
+    font-family: var(--hf-font-family-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+ * Temperature Display
+ * ================================================================ */
+.temp-display {
+    font-family: var(--hf-font-family-mono);
+    font-weight: var(--hf-font-weight-bold);
+}
+
+/* ================================================================
+ * Performance Label
+ * ================================================================ */
+.perf-label {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-font-size-perf-label);
+    color: @view_fg_color;
+    opacity: var(--hf-opacity-near-opaque);
+}

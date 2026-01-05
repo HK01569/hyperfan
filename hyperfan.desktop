@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Hyperfan
-Comment=Advanced fan control application
-Exec=pkexec env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS /bin/sh -c 'cd "$(dirname "%k")" && ./run.sh'
-Icon=fan
-Terminal=false
-Categories=System;Utility;
-StartupNotify=true

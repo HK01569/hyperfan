@@ -1,0 +1,28 @@
+/* Hyperfan GTK4 Stylesheet - Modular Architecture
+ * 
+ * GNOME HIG Compliant - Accessibility First
+ * Uses system theme colors via @define-color and CSS variables.
+ * All colors inherit from the active GTK theme (light/dark).
+ * 
+ * This is the main entry point that combines all modular CSS files.
+ * Each module is responsible for a specific component or concern.
+ * 
+ * Module Load Order (dependencies first):
+ * 1. variables.css    - Design tokens (must be first)
+ * 2. buttons.css      - Base button styles
+ * 3. window-controls.css - Headerbar and window chrome
+ * 4. navigation.css   - Sidebar navigation
+ * 5. cards.css        - Card components
+ * 6. graphs.css       - Graph and curve styling
+ * 7. lists.css        - List rows and sensor rows
+ * 8. forms.css        - Form elements
+ * 9. typography.css   - Text styles
+ * 10. status.css      - Status indicators
+ * 11. utilities.css   - Utility classes
+ * 12. accessibility.css - A11y enhancements (must be last for overrides)
+ */
+
+/* Note: GTK4 CSS does not support @import.
+ * All modules are concatenated at build time via app.rs
+ * This file serves as documentation of the module structure.
+ */

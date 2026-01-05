@@ -1,0 +1,78 @@
+/* Form Elements
+ * 
+ * Entry fields, spinbuttons, checkbuttons, comborows, and search entries.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Entry Fields
+ * ================================================================ */
+entry {
+    min-height: var(--hf-size-entry-height);
+}
+
+entry:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+entry.error {
+    border: var(--hf-border-width-thick) solid @error_color;
+}
+
+/* ================================================================
+ * Search Entry
+ * ================================================================ */
+searchentry:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+/* ================================================================
+ * Spin Button
+ * ================================================================ */
+spinbutton {
+    min-width: var(--hf-size-spinbutton-width);
+}
+
+/* ================================================================
+ * Check Button
+ * ================================================================ */
+checkbutton {
+    min-width: var(--hf-size-checkbutton);
+    min-height: var(--hf-size-checkbutton);
+}
+
+checkbutton check {
+    min-width: var(--hf-size-check);
+    min-height: var(--hf-size-check);
+}
+
+checkbutton:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+/* ================================================================
+ * Combo Row
+ * ================================================================ */
+comborow {
+    min-height: var(--hf-size-comborow-height);
+}
+
+/* ================================================================
+ * Scale Slider
+ * ================================================================ */
+scale:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+scale slider {
+    min-width: var(--hf-size-button-touch);
+    min-height: var(--hf-size-button-touch);
+}

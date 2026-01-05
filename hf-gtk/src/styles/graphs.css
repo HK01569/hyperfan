@@ -1,0 +1,39 @@
+/* Graph & Curve Styles
+ * 
+ * Fan curve graphs, graph lines, fills, and indicators.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Curve Graph Container
+ * ================================================================ */
+.curve-graph {
+    border-radius: var(--hf-radius-md);
+    background-color: alpha(@view_bg_color, var(--hf-opacity-background-tint));
+}
+
+/* ================================================================
+ * Graph Elements
+ * ================================================================ */
+.graph-line {
+    color: @accent_color;
+}
+
+.graph-fill {
+    color: alpha(@accent_color, var(--hf-opacity-accent-hover));
+}
+
+.graph-indicator {
+    color: @error_color;
+}
+
+/* ================================================================
+ * Graph Points (Draggable Control Points)
+ * ================================================================ */
+.graph-point {
+    transition: transform var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+.graph-point:hover {
+    transform: scale(1.2);
+}

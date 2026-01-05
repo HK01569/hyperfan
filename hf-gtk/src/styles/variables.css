@@ -1,0 +1,136 @@
+/* Hyperfan Design Tokens
+ * 
+ * All design values are defined here as CSS custom properties.
+ * This ensures no hardcoded values throughout the stylesheet.
+ * 
+ * Naming convention: --hf-{category}-{property}-{variant}
+ */
+
+/* ================================================================
+ * Spacing Scale (6px base unit)
+ * ================================================================ */
+:root {
+    --hf-spacing-xs: 6px;
+    --hf-spacing-sm: 12px;
+    --hf-spacing-md: 18px;
+    --hf-spacing-lg: 24px;
+    --hf-spacing-xl: 30px;
+    --hf-spacing-xxl: 36px;
+    
+    /* Component-specific spacing */
+    --hf-spacing-button-padding: 4px 8px;
+    --hf-spacing-button-padding-pill: 6px 14px;
+    --hf-spacing-card-padding: 16px;
+    --hf-spacing-dialog-padding: 24px;
+    --hf-spacing-page-header: 16px 24px 8px 24px;
+    --hf-spacing-sensor-row: 8px 12px;
+    --hf-spacing-list-row: 6px 0;
+}
+
+/* ================================================================
+ * Border Radius Scale
+ * ================================================================ */
+:root {
+    --hf-radius-none: 0;
+    --hf-radius-sm: 6px;
+    --hf-radius-md: 8px;
+    --hf-radius-lg: 12px;
+    --hf-radius-circular: 50%;
+    --hf-radius-pill: 9999px;
+}
+
+/* ================================================================
+ * Sizing Scale
+ * ================================================================ */
+:root {
+    /* Button sizes */
+    --hf-size-button-min: 28px;
+    --hf-size-button-touch: 32px;
+    --hf-size-button-nav: 40px;
+    --hf-size-button-circular: 32px;
+    --hf-size-button-window-control: 24px;
+    --hf-size-button-daemon: 28px;
+    
+    /* Form element sizes */
+    --hf-size-entry-height: 36px;
+    --hf-size-spinbutton-width: 80px;
+    --hf-size-checkbutton: 44px;
+    --hf-size-check: 24px;
+    --hf-size-comborow-height: 48px;
+    
+    /* Headerbar */
+    --hf-size-headerbar-height: 36px;
+    
+    /* Icons */
+    --hf-size-icon-window-control: 20px;
+}
+
+/* ================================================================
+ * Timing / Animation
+ * ================================================================ */
+:root {
+    --hf-transition-fast: 100ms;
+    --hf-transition-default: 150ms;
+    --hf-transition-slow: 200ms;
+    --hf-transition-easing: ease;
+}
+
+/* ================================================================
+ * Opacity Scale
+ * ================================================================ */
+:root {
+    --hf-opacity-hover: 0.08;
+    --hf-opacity-active: 0.15;
+    --hf-opacity-strong: 0.25;
+    --hf-opacity-accent-hover: 0.2;
+    --hf-opacity-accent-active: 0.3;
+    --hf-opacity-accent-pressed: 0.4;
+    --hf-opacity-background-tint: 0.5;
+    --hf-opacity-high-contrast: 0.8;
+    --hf-opacity-accessible: 0.85;
+    --hf-opacity-near-opaque: 0.95;
+    --hf-opacity-disabled: 0.5;
+    --hf-opacity-loading: 0.6;
+}
+
+/* ================================================================
+ * Focus Indicators
+ * ================================================================ */
+:root {
+    --hf-focus-width: 3px;
+    --hf-focus-offset: 3px;
+    --hf-focus-width-high-contrast: 4px;
+    --hf-focus-offset-high-contrast: 4px;
+    --hf-focus-width-small: 2px;
+    --hf-focus-offset-small: 2px;
+}
+
+/* ================================================================
+ * Typography
+ * ================================================================ */
+:root {
+    --hf-font-family-mono: monospace;
+    --hf-font-size-page-title: 24px;
+    --hf-font-size-heading: 14px;
+    --hf-font-size-perf-label: 11px;
+    --hf-font-weight-normal: 400;
+    --hf-font-weight-semibold: 600;
+    --hf-font-weight-bold: 700;
+    --hf-font-weight-extrabold: 800;
+}
+
+/* ================================================================
+ * Shadows
+ * ================================================================ */
+:root {
+    --hf-shadow-card-hover: 0 2px 8px alpha(black, 0.1);
+}
+
+/* ================================================================
+ * Borders
+ * ================================================================ */
+:root {
+    --hf-border-width: 1px;
+    --hf-border-width-thick: 2px;
+    --hf-border-width-extra-thick: 3px;
+}

@@ -1,0 +1,25 @@
+[package]
+name = "hf-daemon"
+version = "0.2.98"
+edition = "2021"
+authors = ["henry kleyn"]
+license = "GPL-3.0-or-later"
+description = "Privileged daemon for Hyperfan fan control"
+
+[[bin]]
+name = "hyperfand"
+path = "src/main.rs"
+
+[dependencies]
+hf-core = { path = "../hf-core" }
+hf-protocol = { path = "../hf-protocol" }
+hf-error = { path = "../hf-error" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "io-util", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-journald = "0.3"
+anyhow = "1"
+libc = "0.2"
+ctrlc = "3"

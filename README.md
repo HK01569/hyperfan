@@ -1,101 +1,268 @@
-# WARNING
-hyperfan is in alpha at this time. Make sure you take precautions to avoid damage to your hardware. Feedback, bug reports and feature requests are welcome thank you. If you run --dump-ec and want to contribute that file, please open an issue.
+# Hyperfan
 
-Cheers!
+Professional fan control platform for Linux enthusiasts who demand precise thermal management.
 
-# hyperfan
+Hyperfan provides comprehensive control over system cooling with a modern GTK4 interface, robust hardware detection, and safety-first architecture. Whether you're building a silent workstation, optimizing a gaming rig, or managing server thermals, Hyperfan delivers the precision you need.
 
-Hyperfan is a Linux fan control TUI powered by the `hwmon` subsystem. It enumerates temperature sensors, fan RPMs, and PWM controllers, lets you map fans to PWMs, adjust PWM output, and run a guided auto-detect routine to discover fan↔PWM pairings. A headless service mode applies saved mappings and curves.
+---
 
-Status: active development. Requires root privileges for hardware access.
+## Key Features
 
-## Author
+### Hardware Detection and Fingerprinting
+- Automatic discovery of all temperature sensors, fans, and PWM controllers
+- Advanced hardware fingerprinting survives reboots and hwmon reindexing
+- Confidence-based matching algorithm for stable fan pairing
+- Support for any hwmon-compatible device
 
-**Henry Kleyn**
-- GitHub: [HK01569](https://github.com/HK01569)
+### Visual Fan Curve Editor
+- Interactive drag-and-drop curve editor
+- Real-time preview with live temperature indicator
+- Piecewise linear interpolation
+- Configurable smoothing to prevent oscillation
+- Multiple curves per profile
 
-## Features
+### Comprehensive GPU Support
+- NVIDIA: Full control via nvidia-smi and nvidia-settings
+- AMD: Complete amdgpu sysfs integration (VRAM, power, multi-fan)
+- Intel: i915/xe hwmon monitoring and discrete GPU control
+- Multi-GPU systems fully supported
+- Per-GPU, per-fan control
 
-- Detects `hwmon` chips under `/sys/class/hwmon`
-- Reads temperatures (°C/°F/K), fan RPMs, and PWM raw values
-- TUI with live refresh and keyboard-driven workflow
-- Set PWM as a percentage with safety handling
-- Auto-detect fan↔PWM pairings with progress and confidence scores
-- Replace existing mappings with detected results in one step
-- Headless service mode using saved config and curves
-- Optional EC profile dump for sharing/debugging
+### Privilege Separation Architecture
+- Unprivileged GUI (hf-gtk) for user interface
+- Privileged daemon (hf-daemon) for hardware control
+- Secure Unix socket IPC
+- systemd service integration
+- Safety-first design with automatic fallbacks
 
-## Safety notes
+### Real-Time Monitoring
+- Live temperature and fan speed graphs
+- GPU metrics: VRAM usage, power draw, utilization
+- 100ms control loop for responsive adjustments
+- 1-second GUI updates for efficiency
+- Smooth exponential moving average filtering
 
-- Hyperfan runs with root and writes to `pwmN`/`pwmN_enable` under `hwmon`.
-- Auto-detect temporarily ramps PWMs; original states are captured and restored.
-- Ensure adequate cooling while testing; laptops/desktops vary in sensor update rate.
+### Profile System
+- JSON-based configuration
+- Multiple profiles for different scenarios
+- Hardware fingerprint validation
+- Automatic profile migration
+- Curve library for reusable configurations
 
-## Requirements
+---
 
-- Linux with `sysfs` `hwmon` (most distros)
-- For broader sensor support, install `lm-sensors` and consider running `sudo sensors-detect` to load kernel modules
+## Architecture
 
-## Install Rust
+Hyperfan is built as a modular Rust workspace with clean separation of concerns:
 
-Recommended via rustup:
+| Crate | Description |
+|-------|-------------|
+| **hf-gtk** | GTK4/Libadwaita GUI application (unprivileged) |
+| **hf-daemon** | System daemon for hardware control (privileged) |
+| **hf-core** | Core library: hwmon detection, PWM control, fingerprinting |
+| **hf-gpu** | GPU-specific library: NVIDIA, AMD, Intel implementations |
+| **hf-protocol** | IPC protocol definitions for daemon communication |
+| **hf-error** | Unified error types across all crates |
 
+### Design Principles
+
+- **Safety First**: Always fall back to 100% fan speed on errors
+- **Privilege Separation**: Minimize attack surface with unprivileged GUI
+- **Hardware Agnostic**: Support diverse hardware configurations
+- **Modular Design**: Clean crate boundaries for maintainability
+- **Type Safety**: Leverage Rust's type system for correctness
+
+---
+
+## Screenshots
+
+
+
+---
+
+## Quick Start
+
+### Requirements
+
+- Linux with sysfs hwmon support
+- GTK4 4.12+ and libadwaita 1.5+
+- Rust toolchain 1.70+ (for building from source)
+- Optional: nvidia-smi and nvidia-settings (for NVIDIA GPU control)
+- Optional: systemd (recommended for daemon service)
+
+### Install Dependencies
+
+**Debian/Ubuntu:**
 ```bash
-curl https://sh.rustup.rs -sSf | sh
-source "$HOME/.cargo/env"
-rustup toolchain install stable
+sudo apt install libgtk-4-dev libadwaita-1-dev
 ```
 
-Fish shell users:
-
-```fish
-fish_add_path ~/.cargo/bin
+**Fedora:**
+```bash
+sudo dnf install gtk4-devel libadwaita-devel
 ```
 
-Or use your distro packages (may be older):
+**Arch:**
+```bash
+sudo pacman -S gtk4 libadwaita
+```
 
-- Debian/Ubuntu: `sudo apt-get update && sudo apt-get install -y cargo rustc`
-- Fedora: `sudo dnf install rust cargo`
-- Arch: `sudo pacman -S rust`
-
-## Build and Run
+### Build and Run
 
 ```bash
+# Clone the repository
+git clone https://github.com/HK01569/hyperfan.git
+cd hyperfan
+
+# Build optimized release
 cargo build --release
 
-# Run TUI (root required for hardware access)
-sudo ./target/release/hyperfan
+# Run the GUI
+./target/release/hyperfan
 ```
 
-## CLI modes
+### Install the Daemon
 
-- TUI (default): `sudo hyperfan`
-- Save system config: `sudo hyperfan save` → writes `/etc/hyperfan/profile.json`
-- Service mode: `sudo hyperfan --service` → headless loop using `/etc/hyperfan/profile.json`
-- Dump EC profile: `sudo hyperfan --dump-ec` → writes `/etc/hyperfan/profiles/{ecName}.json`
-  - Includes chips, enumerated `fan*`, `pwm*`, `temp*`, and detected pairings with confidence
+For persistent fan control, install the privileged daemon:
 
+```bash
+# Build the daemon
+cargo build --release -p hf-daemon
+
+# Install binary
+sudo cp target/release/hyperfand /usr/local/bin/
+
+# Install and enable systemd service
+sudo cp hf-daemon/hyperfan.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hyperfan.service
+
+# Check status
+sudo systemctl status hyperfan.service
 ## Configuration
 
-- User mappings are saved in the app; “Save system config” writes to `/etc/hyperfan/profile.json`.
-- Curve configuration is written to `/etc/hyperfan/curves.json` and used by service mode.
+Configuration files are stored in multiple locations:
 
-## Support
+### System Configuration (Daemon)
+- `/etc/hyperfan/profile.json` - Active profile with fan mappings and curves
+- `/run/hyperfan/daemon.sock` - Unix socket for IPC
 
-If you find this project helpful, consider supporting development:
+### User Configuration (GUI)
+- `~/.config/hyperfan/settings.json` - GUI preferences and window state
+- `~/.config/hyperfan/curves/` - Saved fan curve library
+
+### Profile Format
+
+Profiles are JSON files containing fan-sensor pairings and curves:
+
+```json
+{
+  "name": "Gaming Profile",
+  "fan_mappings": [
+    {
+      "fan_path": "/sys/class/hwmon/hwmon3/pwm1",
+      "sensor_path": "/sys/class/hwmon/hwmon0/temp1_input",
+      "curve_name": "cpu_curve",
+      "hardware_id": { /* fingerprint */ }
+    }
+  ],
+  "curves": {
+    "cpu_curve": {
+      "points": [[30.0, 30.0], [60.0, 50.0], [80.0, 100.0]],
+      "smoothing": 0.3
+    }
+  }
+}
+```
+
+---
+
+## Advanced Features
+
+### Hardware Fingerprinting
+
+Hyperfan uses stable hardware identifiers to maintain fan pairings across reboots:
+
+- PCI bus ID (e.g., "0000:00:18.3")
+- PCI vendor and device IDs
+- Driver name and chip model
+- PWM channel number
+
+Confidence-based matching algorithm:
+- **>0.90**: Safe to use automatically
+- **>0.70**: Warn user but allow
+- **>0.40**: Require manual confirmation
+- **<0.40**: Refuse to use (unsafe)
+
+### GPU Fan Control
+
+**NVIDIA GPUs:**
+- Requires nvidia-smi and nvidia-settings
+- X11 session with Coolbits enabled
+- Supports multiple GPUs and fans per GPU
+- Manual and automatic control modes
+
+**AMD GPUs:**
+- Direct sysfs control via amdgpu driver
+- VRAM usage monitoring
+- Power consumption tracking
+- Multi-fan GPU support
+
+**Intel GPUs:**
+- Temperature monitoring via i915/xe hwmon
+- Fan control on discrete GPUs (Arc series)
+- Integrated GPU monitoring
+
+### Safety Mechanisms
+
+- Input validation on all user inputs
+- Path traversal protection
+- File size limits on configurations
+- Automatic fallback to 100% on errors
+- Profile integrity validation
+- Hardware state monitoring
+
+---
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- `app_flow.md` - Application flow and architecture diagrams
+- `app_design.md` - Design decisions and technical details
+- `app_detail.json` - Structured summary of key features and innovations
+
+For detailed API documentation:
+```bash
+cargo doc --open
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! Whether it's bug reports, feature requests, or pull requests, your input helps make Hyperfan better for everyone.
+
+---
+
+## Support Development
+
+If Hyperfan helps keep your system cool, consider supporting development:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/henryk44801)
 
+---
+
 ## License
 
-This project is licensed under the GNU General Public License, version 3 or (at your option) any later version. See `LICENSE.md`.
+GNU General Public License v3.0 or later. See [LICENSE.md](LICENSE.md).
 
-All Rust source files include a GPL-3.0-or-later header.
+---
 
-## Roadmap
+## Author
 
-- Configurable auto-detect thresholds and timing
-- More robust curve editor UX and visualization
-- Additional chipset-specific helpers and safeguards
-- GPU support for AMD, nVIDIA and Intel cards. Legacy cards may be supported in time.
-- Optional cross-platform support (Windows/macOS) as a stretch goal
+**Henry Kleyn** - [GitHub](https://github.com/HK01569)
+
+---
+
+Built with Rust for safety, performance, and reliability.

@@ -1,0 +1,16 @@
+[package]
+name = "hf-gpu"
+version = "0.1.3"
+edition = "2021"
+authors = ["henry kleyn"]
+license = "GPL-3.0-or-later"
+description = "GPU detection and control for Hyperfan - NVIDIA, AMD, and Intel support"
+
+[lib]
+name = "hf_gpu"
+path = "src/lib.rs"
+
+[dependencies]
+hf-error = { path = "../hf-error" }
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }

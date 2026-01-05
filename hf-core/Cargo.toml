@@ -1,0 +1,28 @@
+[package]
+name = "hf-core"
+version = "0.4.9"
+edition = "2021"
+authors = ["henry kleyn"]
+license = "GPL-3.0-or-later"
+description = "Core library for Hyperfan - Linux fan control platform"
+
+[lib]
+name = "hf_core"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+hf-error = { path = "../hf-error" }
+hf-gpu = { path = "../hf-gpu" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+parking_lot = "0.12"
+dirs = "5"
+regex = "1"
+libc = "0.2"
+hf-protocol = { path = "../hf-protocol" }
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

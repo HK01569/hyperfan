@@ -1,0 +1,87 @@
+/* Card Components
+ * 
+ * Card containers for grouped content.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Base Card Styles
+ * ================================================================ */
+.card {
+    border-radius: var(--hf-radius-lg);
+    transition: box-shadow var(--hf-transition-default) var(--hf-transition-easing),
+                background-color var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+.card:hover {
+    box-shadow: var(--hf-shadow-card-hover);
+}
+
+.card:focus-visible {
+    outline: var(--hf-focus-width) solid @accent_color;
+    outline-offset: var(--hf-focus-offset);
+    transition: outline var(--hf-transition-fast) var(--hf-transition-easing);
+}
+
+/* ================================================================
+ * Curve Cards
+ * ================================================================ */
+.curve-card {
+    border-radius: var(--hf-radius-lg);
+    padding: var(--hf-spacing-card-padding);
+}
+
+.curve-card-clickable {
+    border-radius: var(--hf-radius-lg);
+    transition: background-color var(--hf-transition-default) var(--hf-transition-easing),
+                box-shadow var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+.curve-card-clickable:hover {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-accent-active));
+}
+
+.curve-card-clickable:active {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-accent-pressed));
+}
+
+/* ================================================================
+ * Activatable Cards
+ * ================================================================ */
+.card.activatable,
+.card-activatable {
+    transition: background-color var(--hf-transition-default) var(--hf-transition-easing),
+                box-shadow var(--hf-transition-default) var(--hf-transition-easing);
+}
+
+.card.activatable:hover,
+.card-activatable:hover {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-active));
+}
+
+.card.activatable:active,
+.card-activatable:active {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-strong));
+}
+
+/* ================================================================
+ * Fan List Card
+ * ================================================================ */
+.fan-list-card {
+    border-radius: var(--hf-radius-lg);
+}
+
+.fan-list-card listbox {
+    border-radius: var(--hf-radius-lg);
+    background-color: transparent;
+}
+
+.fan-list-card listboxrow:first-child {
+    border-top-left-radius: var(--hf-radius-lg);
+    border-top-right-radius: var(--hf-radius-lg);
+}
+
+.fan-list-card listboxrow:last-child {
+    border-bottom-left-radius: var(--hf-radius-lg);
+    border-bottom-right-radius: var(--hf-radius-lg);
+}

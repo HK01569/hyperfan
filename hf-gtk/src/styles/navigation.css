@@ -1,0 +1,58 @@
+/* Navigation Sidebar
+ * 
+ * Vertical navigation rail with icon buttons.
+ * Uses design tokens from variables.css
+ */
+
+/* ================================================================
+ * Sidebar Container
+ * ================================================================ */
+.nav-sidebar {
+    background-color: alpha(@window_bg_color, var(--hf-opacity-background-tint));
+    border-radius: var(--hf-radius-none);
+}
+
+/* ================================================================
+ * Navigation Buttons
+ * ================================================================ */
+button.nav-button {
+    border-radius: var(--hf-radius-sm);
+    min-width: var(--hf-size-button-nav);
+    max-width: var(--hf-size-button-nav);
+    min-height: var(--hf-size-button-nav);
+    max-height: var(--hf-size-button-nav);
+    padding: 4px;
+    transition: all var(--hf-transition-default) var(--hf-transition-easing);
+    background-color: transparent;
+}
+
+button.nav-button:hover {
+    background-color: alpha(@accent_bg_color, var(--hf-opacity-accent-hover));
+}
+
+button.nav-button:focus-visible {
+    outline: var(--hf-focus-width-small) solid @accent_color;
+    outline-offset: var(--hf-focus-offset-small);
+}
+
+/* ================================================================
+ * Active Navigation Button (Selected Page)
+ * ================================================================ */
+button.nav-button.suggested-action {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+button.nav-button.suggested-action image,
+button.nav-button.suggested-action * {
+    color: @accent_fg_color;
+}
+
+button.nav-button.suggested-action:hover {
+    background-color: shade(@accent_bg_color, 1.1);
+}
+
+button.nav-button.suggested-action:focus-visible {
+    outline: var(--hf-focus-width-small) solid @accent_fg_color;
+    outline-offset: var(--hf-focus-offset-small);
+}
