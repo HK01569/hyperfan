@@ -202,6 +202,10 @@ impl Dashboard {
                     } else {
                         vec![pair.fan_path.clone()]
                     };
+                    debug!(
+                        "Loading pair '{}': fan_path='{}', fan_paths={:?}",
+                        pair.name, pair.fan_path, fan_paths
+                    );
                     let pair_data = PairData {
                         id: pair.id,
                         name: pair.name,
@@ -815,32 +819,15 @@ impl Dashboard {
 
         content.append(&preview);
         
-        debug!("Widget tree built for '{}' - temp_label parent: {:?}, percent_label parent: {:?}", 
-               pair.name, temp_label.parent().is_some(), percent_label.parent().is_some());
-
         // Initialize with current temp reading from cached runtime data
         let initial_temp = crate::runtime::get_sensors()
             .and_then(|data| {
-                debug!("Control pair '{}' initializing - runtime cache has {} temps", 
-                       pair.name, data.temperatures.len());
-                if data.temperatures.is_empty() {
-                    debug!("Runtime cache is empty during control pair initialization");
-                }
-                debug!("Looking for temp path: {}", temp_path);
-                debug!("Available temp paths: {:?}", 
-                       data.temperatures.iter().map(|t| &t.path).collect::<Vec<_>>());
                 data.temperatures.iter()
                     .find(|t| t.path == temp_path)
                     .map(|t| t.temp_celsius)
-            })
-            .or_else(|| {
-                debug!("Control pair '{}' - runtime cache miss, using daemon read for: {}", 
-                       pair.name, temp_path);
-                daemon_client::daemon_read_temperature(&temp_path).ok()
             });
         
         if let Some(temp) = initial_temp {
-            debug!("Control pair '{}' initialized with temp: {:.1}°C", pair.name, temp);
             anim_state.borrow_mut().target = temp;
             anim_state.borrow_mut().display = temp;
             let temp_str = hf_core::display::format_temp_precise(temp);
@@ -848,84 +835,38 @@ impl Dashboard {
             let percent_str = hf_core::display::format_fan_speed_f32(percent);
             temp_label.set_label(&temp_str);
             percent_label.set_label(&percent_str);
-            debug!("Control pair '{}' - initial labels set: temp='{}' percent='{}'", pair.name, temp_str, percent_str);
-        } else {
-            warn!("Control pair '{}' failed to get initial temperature for path: {}", pair.name, temp_path);
         }
         
         // Set up polling timer to update temperature from cached runtime data
         let poll_interval_ms = hf_core::get_cached_settings().general.poll_interval_ms as u64;
         let poll_interval_ms = poll_interval_ms.max(50);
         
-        debug!("Setting up polling timer for '{}' with interval {}ms for path: {}", 
-               pair.name, poll_interval_ms, temp_path);
-        
         let anim_for_poll = anim_state.clone();
         let temp_label_for_poll = temp_label.clone();
         let percent_label_for_poll = percent_label.clone();
         let points_for_poll = points.clone();
         let temp_path_for_poll = temp_path.clone();
-        let pair_name_for_poll = pair.name.clone();
         
         // CRITICAL: Use weak reference to card so timeout stops when card is destroyed
         // This prevents memory leak when pairs are removed/rebuilt
         let card_weak = glib::SendWeakRef::from(card.downgrade());
         
-        let poll_count = Rc::new(RefCell::new(0u32));
-        let poll_count_for_timer = poll_count.clone();
-        
-        let pair_name_for_log = pair_name_for_poll.clone();
-        debug!("Polling timer created for '{}'", pair_name_for_log);
-        
         glib::timeout_add_local(std::time::Duration::from_millis(poll_interval_ms), move || {
             // Check if card still exists - if not, stop the timer
             if card_weak.upgrade().is_none() {
-                debug!("Card '{}' destroyed, stopping temperature poll timer", pair_name_for_poll);
                 return glib::ControlFlow::Break;
             }
             
-            let count = *poll_count_for_timer.borrow();
-            *poll_count_for_timer.borrow_mut() = count + 1;
-            
-            // Log first poll and every 10th poll
-            if count == 0 {
-                debug!("FIRST POLL for '{}' - timer is running!", pair_name_for_poll);
-            }
-            if count % 10 == 0 {
-                debug!("Active Controls poll #{} for '{}' path: {}", count, pair_name_for_poll, temp_path_for_poll);
-            }
-            
-            // PERFORMANCE: Use cached sensor data from runtime worker (non-blocking)
+            // PERFORMANCE: Use cached sensor data from runtime worker (non-blocking, no fallback IPC)
             let temp_result = crate::runtime::get_sensors()
                 .and_then(|data| {
-                    let found = data.temperatures.iter()
+                    data.temperatures.iter()
                         .find(|t| t.path == temp_path_for_poll)
-                        .map(|t| t.temp_celsius);
-                    
-                    if found.is_none() && count % 10 == 0 {
-                        debug!("Temperature lookup failed for path: {}", temp_path_for_poll);
-                        debug!("Available paths in cache: {:?}", 
-                               data.temperatures.iter().map(|t| &t.path).take(5).collect::<Vec<_>>());
-                    }
-                    found
-                })
-                .or_else(|| {
-                    if count % 10 == 0 {
-                        debug!("Falling back to daemon read for: {}", temp_path_for_poll);
-                    }
-                    daemon_client::daemon_read_temperature(&temp_path_for_poll).ok()
+                        .map(|t| t.temp_celsius)
                 });
             
             if let Some(temp) = temp_result {
-                let old_target = anim_for_poll.borrow().target;
-                
-                // CRITICAL DEBUG: Log every single update attempt
-                if count == 0 || count % 5 == 0 {
-                    debug!("UPDATING LABELS for '{}': temp={:.1}°C", pair_name_for_poll, temp);
-                }
-                
                 // Always update to ensure UI reflects current sensor state
-                // Animation will smooth out the visual changes
                 anim_for_poll.borrow_mut().set_target(temp);
                 
                 let temp_str = hf_core::display::format_temp_precise(temp);
@@ -934,23 +875,9 @@ impl Dashboard {
                 let percent = Self::interpolate(&points_for_poll, temp);
                 let percent_str = hf_core::display::format_fan_speed_f32(percent);
                 percent_label_for_poll.set_label(&percent_str);
-                
-                if count == 0 || count % 5 == 0 {
-                    debug!("LABELS SET for '{}': temp='{}' percent='{}'", pair_name_for_poll, temp_str, percent_str);
-                }
-                
-                if (temp - old_target).abs() > 0.5 {
-                    debug!("Active Controls temp updated: {:.1}°C -> {:.1}°C ({}%)", old_target, temp, percent);
-                }
-            } else {
-                if count % 10 == 0 {
-                    warn!("Active Controls failed to read temperature for path: {}", temp_path_for_poll);
-                }
             }
             glib::ControlFlow::Continue
         });
-        
-        debug!("Polling timer REGISTERED for '{}' - timer should start firing in {}ms", pair.name, poll_interval_ms);
         
         // Animation frame timer for smooth indicator movement (60fps)
         let anim_for_frame = anim_state.clone();

@@ -37,6 +37,27 @@ impl HyperfanApp {
     fn on_startup(_app: &adw::Application) {
         adw::init().expect("FATAL: Failed to initialize libadwaita. Please ensure GTK4 and libadwaita are properly installed on your system.");
         Self::apply_saved_color_scheme();
+        Self::apply_saved_rate_limit();
+    }
+    
+    /// Apply the saved rate limit from settings to client (daemon gets it on first request)
+    fn apply_saved_rate_limit() {
+        let settings = match hf_core::load_settings() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Failed to load settings for rate limit, using defaults: {}", e);
+                hf_core::AppSettings::default()
+            }
+        };
+        
+        // Apply to client immediately
+        let actual = hf_core::set_client_rate_limit(settings.general.rate_limit);
+        tracing::debug!("Applied client rate limit: {}", actual);
+        
+        // Try to apply to daemon (may fail if daemon not running yet)
+        if let Err(e) = hf_core::daemon_set_rate_limit(settings.general.rate_limit) {
+            tracing::debug!("Could not set daemon rate limit at startup (daemon may not be running): {}", e);
+        }
     }
 
     /// Apply the saved color scheme from settings

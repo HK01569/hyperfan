@@ -172,11 +172,16 @@ pub use daemon_client::{
     daemon_read_temperature, daemon_read_fan_rpm, daemon_read_pwm,
     daemon_set_pwm, daemon_enable_manual_pwm, daemon_disable_manual_pwm,
     daemon_set_pwm_override, daemon_clear_pwm_override,
-    daemon_list_hardware, daemon_list_gpus, daemon_set_gpu_fan, daemon_set_gpu_fan_for_fan,
+    daemon_list_hardware, daemon_list_all, DaemonAllHardwareData,
+    daemon_list_gpus, daemon_set_gpu_fan, daemon_set_gpu_fan_for_fan,
     daemon_detect_fan_mappings, daemon_reload_config,
     daemon_reset_gpu_fan_auto,
     daemon_get_manual_pairings, daemon_set_manual_pairing, daemon_delete_manual_pairing,
     daemon_list_ec_chips, daemon_read_ec_register, daemon_write_ec_register, daemon_read_ec_register_range,
+    // Rate limit configuration
+    MIN_RATE_LIMIT, MAX_RATE_LIMIT,
+    get_client_rate_limit, set_client_rate_limit,
+    daemon_get_rate_limit, daemon_set_rate_limit, set_rate_limits,
 };
 
 // Re-export display formatting functions

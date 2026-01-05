@@ -374,7 +374,12 @@ impl CurveCard {
         let percent_label_for_tick = percent_label.clone();
         let last_render_time: Rc<RefCell<Option<i64>>> = Rc::new(RefCell::new(None));
 
-        drawing_area.add_tick_callback(move |_, frame_clock| {
+        drawing_area.add_tick_callback(move |widget, frame_clock| {
+            // PERFORMANCE: Skip if widget is not visible (not mapped to screen)
+            if !widget.is_mapped() {
+                return gtk4::glib::ControlFlow::Continue;
+            }
+            
             let frame_time = frame_clock.frame_time();
             
             // Get configured frame rate (0 = native refresh rate, otherwise throttle)

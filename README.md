@@ -1,8 +1,12 @@
 # Hyperfan
 
-Professional fan control platform for Linux enthusiasts who demand precise thermal management.
+Professional fan control platform for Linux enthusiasts who demand precise thermal management, written in Rust!
 
-Hyperfan provides comprehensive control over system cooling with a modern GTK4 interface, robust hardware detection, and safety-first architecture. Whether you're building a silent workstation, optimizing a gaming rig, or managing server thermals, Hyperfan delivers the precision you need.
+Hyperfan provides comprehensive control over system cooling with a modern GTK4 interface, robust hardware detection, and safety-first architecture. Whether you're building a silent workstation, optimizing a gaming rig, or managing server thermals, Hyperfan delivers the precision you need. QT4 support is planned, but work on this has not yet been started. 
+
+Hyperfan is in early ALPHA! It requires substantial testing and validation.
+
+EC control is exceptionaly early in its development, and should not be used for anything other than testing. BE VERY CAUTIOUS WITH DIRECT EC CONTROL!
 
 ---
 
@@ -226,16 +230,8 @@ Confidence-based matching algorithm:
 
 ## Documentation
 
-Comprehensive documentation is available in the `docs/` directory:
+was in /docs/, but I plan a migration to in app documentation for ease of use. WORK IN PROGRESS!
 
-- `app_flow.md` - Application flow and architecture diagrams
-- `app_design.md` - Design decisions and technical details
-- `app_detail.json` - Structured summary of key features and innovations
-
-For detailed API documentation:
-```bash
-cargo doc --open
-```
 
 ---
 
@@ -262,7 +258,3 @@ GNU General Public License v3.0 or later. See [LICENSE.md](LICENSE.md).
 ## Author
 
 **Henry Kleyn** - [GitHub](https://github.com/HK01569)
-
----
-
-Built with Rust for safety, performance, and reliability.

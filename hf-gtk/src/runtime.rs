@@ -139,9 +139,10 @@ pub struct WorkerRuntime {
 impl WorkerRuntime {
     /// Create and start the worker runtime
     pub fn new() -> Self {
-        // Create tokio runtime with 4 worker threads
+        // PERF: Use 2 worker threads - we only have 2 real workers (sensor + logic)
+        // More threads = more context switching overhead
         let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
+            .worker_threads(2)
             .thread_name("hyperfan-worker")
             .enable_all()
             .build()
@@ -160,7 +161,7 @@ impl WorkerRuntime {
 
         this.spawn_workers(shutdown_rx);
         
-        tracing::info!("Worker runtime initialized with 4 threads");
+        tracing::info!("Worker runtime initialized with 2 threads");
         this
     }
 
@@ -208,14 +209,6 @@ impl WorkerRuntime {
                 // Update shared state
                 *state_sensor.sensors.write().await = data.clone();
                 state_sensor.sensor_reads.fetch_add(1, Ordering::Relaxed);
-                
-                // Debug: Log sensor data population
-                tracing::debug!("[Sensor Worker] Updated cache with {} temps, {} fans, {} GPUs", 
-                               data.temperatures.len(), data.fans.len(), data.gpus.len());
-                if !data.temperatures.is_empty() {
-                    tracing::debug!("[Sensor Worker] Temperature paths: {:?}", 
-                                   data.temperatures.iter().map(|t| &t.path).take(5).collect::<Vec<_>>());
-                }
 
                 // Send to logic worker (non-blocking, drop if full)
                 let _ = sensor_tx.try_send(data);
@@ -380,23 +373,12 @@ impl Drop for WorkerRuntime {
 // Sensor Reading (runs in blocking thread pool)
 // ============================================================================
 
-/// Counter for GPU read throttling
-/// PERFORMANCE: nvidia-smi spawns a subprocess which is expensive
-/// We only read GPU data every N sensor cycles (e.g., every 4th = 1 second at 250ms)
-static GPU_READ_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-const GPU_READ_INTERVAL: u32 = 4; // Read GPUs every 4th cycle (1 second at 250ms polling)
-
-/// Cached GPU data for cycles when we skip GPU enumeration
+/// Cached GPU data for other code that might need it
 static CACHED_GPU_DATA: std::sync::OnceLock<std::sync::RwLock<Vec<GpuReading>>> = std::sync::OnceLock::new();
 
 fn get_gpu_cache() -> &'static std::sync::RwLock<Vec<GpuReading>> {
     CACHED_GPU_DATA.get_or_init(|| std::sync::RwLock::new(Vec::new()))
 }
-
-/// PERFORMANCE: Cache hwmon chip structure to avoid re-enumerating every cycle
-/// The chip structure (paths, names) rarely changes - only values need refreshing
-// Hwmon cache removed - daemon provides fresh data on each request
-// This simplifies the architecture and avoids stale cache issues
 
 /// Read all sensors - runs in spawn_blocking to not block async runtime
 fn read_all_sensors_blocking() -> SensorData {
@@ -409,9 +391,20 @@ fn read_all_sensors_blocking() -> SensorData {
     let mut fans = Vec::new();
     let mut gpus: Vec<GpuReading> = Vec::new();
 
-    // Daemon authoritative: read hwmon data via daemon IPC.
-    if let Ok(hw) = hf_core::daemon_list_hardware() {
-        for chip in hw.chips {
+    // PERFORMANCE: Single batched IPC call for hardware + GPUs
+    // This reduces IPC round-trips from 2 to 1 per poll cycle
+    // Falls back to separate calls if daemon doesn't support ListAll yet
+    let all_data: Result<hf_core::DaemonAllHardwareData, String> = hf_core::daemon_list_all()
+        .or_else(|_| {
+            // Fallback for older daemon versions
+            let hardware = hf_core::daemon_list_hardware()?;
+            let gpus = hf_core::daemon_list_gpus().unwrap_or_default();
+            Ok(hf_core::DaemonAllHardwareData { hardware, gpus })
+        });
+    
+    if let Ok(all_data) = all_data {
+        // Process hwmon chips
+        for chip in all_data.hardware.chips {
             for temp in chip.temperatures {
                 temperatures.push(TempReading {
                     path: temp.path,
@@ -420,14 +413,6 @@ fn read_all_sensors_blocking() -> SensorData {
                     temp_celsius: temp.value,
                 });
             }
-            
-            // Build PWM lookup map for matching fans to their controllers
-            let pwm_map: std::collections::HashMap<String, (u8, f32)> = chip.pwms.iter()
-                .map(|pwm| {
-                    let percent = (pwm.value as f32 / 255.0) * 100.0;
-                    (pwm.path.clone(), (pwm.value, percent))
-                })
-                .collect();
             
             for fan in chip.fans {
                 // Try to find matching PWM controller for this fan
@@ -456,30 +441,11 @@ fn read_all_sensors_blocking() -> SensorData {
                     percent,
                     pwm_value,
                 });
-                
-                // Debug: Log first read to verify data is coming through
-                if fans.len() == 1 {
-                    tracing::debug!("[Runtime] First fan cached: path={}, rpm={:?}, pwm={:?}", 
-                        fan.path, fan.rpm, pwm_value);
-                }
             }
         }
-    } else {
-        tracing::warn!("[Runtime] Failed to get hardware data from daemon");
-    }
-
-    // PERFORMANCE: Only read GPU data every N cycles
-    // Daemon authoritative: use daemon GPU list.
-    let counter = GPU_READ_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    if counter % GPU_READ_INTERVAL == 0 {
-        let fresh_gpus: Vec<GpuReading> = match hf_core::daemon_list_gpus() {
-            Ok(gpu_list) => gpu_list,
-            Err(e) => {
-                tracing::debug!("Failed to enumerate GPUs from daemon: {}", e);
-                Vec::new()
-            }
-        }
-            .into_iter()
+        
+        // Process GPUs from batched response
+        gpus = all_data.gpus.into_iter()
             .map(|gpu| {
                 let mut temperatures: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
                 if let Some(t) = gpu.temp {
@@ -501,19 +467,13 @@ fn read_all_sensors_blocking() -> SensorData {
                 }
             })
             .collect();
-
+        
+        // Update GPU cache for other code that might need it
         if let Ok(mut cache) = get_gpu_cache().write() {
-            *cache = fresh_gpus.clone();
+            *cache = gpus.clone();
         }
-        gpus = fresh_gpus;
     } else {
-        gpus = match get_gpu_cache().read() {
-            Ok(cache) => cache.clone(),
-            Err(e) => {
-                tracing::warn!("GPU cache lock poisoned: {}", e);
-                Vec::new()
-            }
-        };
+        tracing::warn!("[Runtime] Failed to get hardware data from daemon");
     }
 
     // Add GPU temperatures to the temperatures array so they can be found by path lookup

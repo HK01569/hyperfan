@@ -127,6 +127,11 @@ pub struct GeneralSettings {
     /// Default page to show on startup: "dashboard", "curves", "fan_pairing", "sensors", "graphs"
     #[serde(default = "default_page")]
     pub default_page: String,
+    
+    /// Rate limit: maximum requests per 10-second window (1500-9999)
+    /// Applied to both client and daemon when changed
+    #[serde(default = "default_rate_limit")]
+    pub rate_limit: u32,
 }
 
 /// Advanced settings (dangerous features)
@@ -378,6 +383,7 @@ fn default_window_manager() -> String { "auto".to_string() }
 fn default_graph_smoothing() -> String { "direct".to_string() }
 fn default_frame_rate() -> u32 { 60 }
 fn default_page() -> String { "dashboard".to_string() }
+fn default_rate_limit() -> u32 { 1500 }
 
 /// Check if a string is a valid UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 fn is_valid_uuid(s: &str) -> bool {
@@ -437,6 +443,7 @@ impl Default for GeneralSettings {
             poll_interval_ms: 100,
             apply_curves_on_startup: true,
             default_page: "dashboard".to_string(),
+            rate_limit: 1500,
         }
     }
 }

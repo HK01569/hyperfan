@@ -32,7 +32,7 @@ use tracing::{info, warn, error, debug, trace};
 use hf_protocol::{
     Request, Response, ResponseData, HardwareInfo, HwmonChip, TempSensor,
     FanSensor, PwmControl, GpuInfo, ManualPwmFanPairing, validate_hwmon_path,
-    validate_pwm_target_path,
+    validate_pwm_target_path, AllHardwareData,
     EcChipInfo, EcRegisterValue,
 };
 
@@ -52,8 +52,14 @@ const READ_TIMEOUT: Duration = Duration::from_secs(30);
 /// Write timeout per message
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Rate limit: maximum requests per window
-const RATE_LIMIT_REQUESTS: u32 = 500;
+/// Rate limit: default maximum requests per window (matches client default)
+const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 1500;
+
+/// Minimum rate limit (cannot go below this)
+pub const MIN_RATE_LIMIT: u32 = 1500;
+
+/// Maximum rate limit (cannot exceed this)
+pub const MAX_RATE_LIMIT: u32 = 9999;
 
 /// Rate limit window duration
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
@@ -65,12 +71,64 @@ const SOCKET_MODE: u32 = 0o666;
 /// Default TTL for SetPwm override to prevent control loop fighting (3 seconds)
 const DEFAULT_PWM_OVERRIDE_TTL_MS: u32 = 3000;
 
+/// How often to refresh the hwmon chip structure cache (seconds)
+/// The chip structure (paths, names) rarely changes - only values need refreshing
+const CHIP_CACHE_TTL_SECS: u64 = 30;
+
 // ============================================================================
 // Connection Tracking
 // ============================================================================
 
 /// Global connection counter
 static ACTIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+
+// ============================================================================
+// Hwmon Chip Cache (PERF: avoid re-enumerating filesystem on every request)
+// ============================================================================
+
+use std::sync::OnceLock;
+use std::sync::RwLock as StdRwLock;
+
+/// Cached hwmon chip structure with timestamp
+struct ChipCache {
+    chips: Vec<hf_core::HwmonChip>,
+    cached_at: Instant,
+}
+
+static CHIP_CACHE: OnceLock<StdRwLock<Option<ChipCache>>> = OnceLock::new();
+
+fn get_chip_cache() -> &'static StdRwLock<Option<ChipCache>> {
+    CHIP_CACHE.get_or_init(|| StdRwLock::new(None))
+}
+
+/// Get hwmon chips with caching - avoids filesystem enumeration on every poll
+fn get_cached_chips() -> Result<Vec<hf_core::HwmonChip>, String> {
+    let cache = get_chip_cache();
+    
+    // Fast path: check if cache is valid
+    {
+        let guard = cache.read().map_err(|_| "Cache lock poisoned")?;
+        if let Some(ref cached) = *guard {
+            if cached.cached_at.elapsed().as_secs() < CHIP_CACHE_TTL_SECS {
+                return Ok(cached.chips.clone());
+            }
+        }
+    }
+    
+    // Slow path: refresh cache
+    let chips = hf_core::enumerate_hwmon_chips()
+        .map_err(|e| format!("Failed to enumerate hardware: {}", e))?;
+    
+    {
+        let mut guard = cache.write().map_err(|_| "Cache lock poisoned")?;
+        *guard = Some(ChipCache {
+            chips: chips.clone(),
+            cached_at: Instant::now(),
+        });
+    }
+    
+    Ok(chips)
+}
 
 async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
     reader: &mut R,
@@ -115,6 +173,8 @@ async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
 /// Rate limiter state per client (keyed by UID)
 struct RateLimiter {
     clients: HashMap<u32, ClientState>,
+    /// Current rate limit (configurable at runtime)
+    max_requests: u32,
 }
 
 fn pwm_enable_path_from_pwm_path(pwm_path: &str) -> Result<String, String> {
@@ -199,6 +259,7 @@ impl RateLimiter {
     fn new() -> Self {
         Self {
             clients: HashMap::new(),
+            max_requests: DEFAULT_RATE_LIMIT_REQUESTS,
         }
     }
     
@@ -217,12 +278,23 @@ impl RateLimiter {
             state.window_start = now;
         }
         
-        if state.request_count >= RATE_LIMIT_REQUESTS {
+        if state.request_count >= self.max_requests {
             return false;
         }
         
         state.request_count += 1;
         true
+    }
+    
+    /// Set the rate limit (clamped to valid range)
+    fn set_rate_limit(&mut self, limit: u32) -> u32 {
+        self.max_requests = limit.clamp(MIN_RATE_LIMIT, MAX_RATE_LIMIT);
+        self.max_requests
+    }
+    
+    /// Get current rate limit
+    fn get_rate_limit(&self) -> u32 {
+        self.max_requests
     }
     
     /// Cleanup old entries to prevent memory growth
@@ -263,7 +335,7 @@ pub async fn run_server(socket_path: &str, fan_control_state: Arc<crate::fan_con
     
     info!("Listening on {} (mode {:o})", socket_path, SOCKET_MODE);
     info!("Security: max_conn={}, max_msg={}, rate_limit={}/{:?}", 
-          MAX_CONNECTIONS, MAX_MESSAGE_SIZE, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW);
+          MAX_CONNECTIONS, MAX_MESSAGE_SIZE, DEFAULT_RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW);
     
     // Shared rate limiter
     let rate_limiter = Arc::new(Mutex::new(RateLimiter::new()));
@@ -416,7 +488,7 @@ async fn handle_client(
                 };
 
                 // Process request with audit logging
-                let response_envelope = process_request(line_str, &cred, &fan_control_state).await;
+                let response_envelope = process_request(line_str, &cred, &fan_control_state, &rate_limiter).await;
                 
                 // Send response with timeout
                 if send_response(&mut writer, &response_envelope).await.is_err() {
@@ -603,6 +675,7 @@ async fn process_request(
     line: &str, 
     cred: &PeerCredentials,
     fan_control_state: &Arc<crate::fan_control::FanControlState>,
+    rate_limiter: &Arc<Mutex<RateLimiter>>,
 ) -> hf_protocol::ResponseEnvelope {
     // Parse request envelope with strict validation
     let envelope: hf_protocol::RequestEnvelope = match serde_json::from_str(line.trim()) {
@@ -639,6 +712,9 @@ async fn process_request(
         Request::Version => Response::ok_string(env!("CARGO_PKG_VERSION")),
         
         Request::ListHardware => list_hardware(),
+        
+        // Batched request: hardware + GPUs in single response (performance optimization)
+        Request::ListAll => list_all(),
         
         Request::ReadTemperature { path } => read_temperature(&path),
         
@@ -788,6 +864,19 @@ async fn process_request(
             // Not implemented - manual mode is handled via PWM overrides
             Response::error("GetGlobalMode not implemented")
         }
+        
+        Request::GetRateLimit => {
+            let limiter = rate_limiter.lock().await;
+            let limit = limiter.get_rate_limit();
+            Response::Ok(ResponseData::rate_limit(limit))
+        }
+        
+        Request::SetRateLimit { limit } => {
+            let mut limiter = rate_limiter.lock().await;
+            let actual_limit = limiter.set_rate_limit(limit);
+            info!("Rate limit changed to {} by uid={}", actual_limit, cred.uid);
+            Response::Ok(ResponseData::rate_limit(actual_limit))
+        }
     };
     
     // Log errors for audit
@@ -842,61 +931,91 @@ fn sanitize_validation_error(error: &str) -> String {
     "Invalid request parameter".to_string()
 }
 
-fn list_hardware() -> Response {
-    match hf_core::enumerate_hwmon_chips() {
-        Ok(chips) => {
-            let chips: Vec<HwmonChip> = chips.iter().map(|c| {
-                HwmonChip {
-                    name: c.name.clone(),
-                    path: c.path.to_string_lossy().to_string(),
-                    temperatures: c.temperatures.iter().map(|t| {
-                        let value = hf_core::read_temperature(&t.input_path).unwrap_or(f32::NAN);
-                        TempSensor {
-                            name: t.name.clone(),
-                            label: t.label.clone(),
-                            path: t.input_path.to_string_lossy().to_string(),
-                            value,
-                        }
-                    }).collect(),
-                    fans: c.fans.iter().map(|f| {
-                        let rpm = hf_core::read_fan_rpm(&f.input_path).ok();
-                        // Generate stable UUID from chip name + fan name
-                        let uuid = generate_sensor_uuid(&c.name, &f.name, "fan");
-                        FanSensor {
-                            uuid,
-                            name: f.name.clone(),
-                            label: f.label.clone(),
-                            path: f.input_path.to_string_lossy().to_string(),
-                            rpm,
-                        }
-                    }).collect(),
-                    pwms: c.pwms.iter().map(|p| {
-                        let value = std::fs::read_to_string(&p.pwm_path)
-                            .ok()
-                            .and_then(|s| s.trim().parse().ok())
-                            .unwrap_or(0);
-                        let enabled = std::fs::read_to_string(&p.enable_path)
-                            .ok()
-                            .and_then(|s| s.trim().parse::<u8>().ok())
-                            .map(|v| v == 1)
-                            .unwrap_or(false);
-                        // Generate stable UUID from chip name + pwm name
-                        let uuid = generate_sensor_uuid(&c.name, &p.name, "pwm");
-                        PwmControl {
-                            uuid,
-                            name: p.name.clone(),
-                            path: p.pwm_path.to_string_lossy().to_string(),
-                            value,
-                            enabled,
-                        }
-                    }).collect(),
+/// Convert hwmon chips to protocol format (shared by list_hardware and list_all)
+fn chips_to_protocol(chips: &[hf_core::HwmonChip]) -> Vec<HwmonChip> {
+    chips.iter().map(|c| {
+        HwmonChip {
+            name: c.name.clone(),
+            path: c.path.to_string_lossy().to_string(),
+            temperatures: c.temperatures.iter().map(|t| {
+                let value = hf_core::read_temperature(&t.input_path).unwrap_or(f32::NAN);
+                TempSensor {
+                    name: t.name.clone(),
+                    label: t.label.clone(),
+                    path: t.input_path.to_string_lossy().to_string(),
+                    value,
                 }
-            }).collect();
-            
-            Response::Ok(ResponseData::hw(HardwareInfo { chips }))
+            }).collect(),
+            fans: c.fans.iter().map(|f| {
+                let rpm = hf_core::read_fan_rpm(&f.input_path).ok();
+                let uuid = generate_sensor_uuid(&c.name, &f.name, "fan");
+                FanSensor {
+                    uuid,
+                    name: f.name.clone(),
+                    label: f.label.clone(),
+                    path: f.input_path.to_string_lossy().to_string(),
+                    rpm,
+                }
+            }).collect(),
+            pwms: c.pwms.iter().map(|p| {
+                let value = std::fs::read_to_string(&p.pwm_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse().ok())
+                    .unwrap_or(0);
+                let enabled = std::fs::read_to_string(&p.enable_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u8>().ok())
+                    .map(|v| v == 1)
+                    .unwrap_or(false);
+                let uuid = generate_sensor_uuid(&c.name, &p.name, "pwm");
+                PwmControl {
+                    uuid,
+                    name: p.name.clone(),
+                    path: p.pwm_path.to_string_lossy().to_string(),
+                    value,
+                    enabled,
+                }
+            }).collect(),
         }
-        Err(e) => Response::error(format!("Failed to enumerate hardware: {}", e)),
+    }).collect()
+}
+
+/// Convert GPUs to protocol format (shared by list_gpus and list_all)
+fn gpus_to_protocol(gpus: &[hf_gpu::GpuDevice]) -> Vec<GpuInfo> {
+    gpus.iter().map(|g| {
+        GpuInfo {
+            index: g.index,
+            name: g.name.clone(),
+            vendor: g.vendor.to_string(),
+            temp: g.temperatures.first().and_then(|t| t.current_temp),
+            fan_percent: g.fans.first().and_then(|f| f.speed_percent),
+            fan_rpm: g.fans.first().and_then(|f| f.rpm),
+        }
+    }).collect()
+}
+
+fn list_hardware() -> Response {
+    match get_cached_chips() {
+        Ok(chips) => {
+            Response::Ok(ResponseData::hw(HardwareInfo { chips: chips_to_protocol(&chips) }))
+        }
+        Err(e) => Response::error(e),
     }
+}
+
+/// Batched hardware + GPU enumeration (single IPC call for polling)
+fn list_all() -> Response {
+    let hardware = match get_cached_chips() {
+        Ok(chips) => HardwareInfo { chips: chips_to_protocol(&chips) },
+        Err(e) => return Response::error(e),
+    };
+    
+    let gpus = match hf_core::enumerate_gpus() {
+        Ok(gpus) => gpus_to_protocol(&gpus),
+        Err(_) => Vec::new(), // GPUs are optional, don't fail the whole request
+    };
+    
+    Response::Ok(ResponseData::all(AllHardwareData { hardware, gpus }))
 }
 
 fn read_temperature(path: &str) -> Response {
@@ -1060,20 +1179,7 @@ async fn clear_pwm_override(
 
 fn list_gpus() -> Response {
     match hf_core::enumerate_gpus() {
-        Ok(gpus) => {
-            let gpu_infos: Vec<GpuInfo> = gpus.iter().map(|g| {
-                GpuInfo {
-                    index: g.index,
-                    name: g.name.clone(),
-                    vendor: g.vendor.to_string(),
-                    temp: g.temperatures.first().and_then(|t| t.current_temp),
-                    fan_percent: g.fans.first().and_then(|f| f.speed_percent),
-                    fan_rpm: g.fans.first().and_then(|f| f.rpm),
-                }
-            }).collect();
-            
-            Response::Ok(ResponseData::gpu_list(gpu_infos))
-        }
+        Ok(gpus) => Response::Ok(ResponseData::gpu_list(gpus_to_protocol(&gpus))),
         Err(e) => Response::error(format!("Failed to enumerate GPUs: {}", e)),
     }
 }

@@ -407,9 +407,29 @@ impl HyperfanWindow {
         let fan_pairing_for_check = fan_pairing.clone();
         let dashboard_for_check = dash.clone();
         let was_available = Rc::new(RefCell::new(hf_core::is_daemon_available()));
+        let last_error: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         glib::timeout_add_local(Duration::from_secs(DAEMON_CHECK_INTERVAL_SECS), move || {
-            let is_available = hf_core::is_daemon_available();
-            daemon_indicator_for_check.set_visible(is_available);
+            let ping_result = hf_core::daemon_client::ping_daemon();
+            let is_available = ping_result.is_ok();
+            daemon_indicator_for_check.set_visible(is_available || ping_result.is_err());
+            
+            // Update error state and tooltip
+            match &ping_result {
+                Ok(()) => {
+                    if last_error.borrow().is_some() {
+                        daemon_indicator_for_check.remove_css_class("daemon-error");
+                        daemon_indicator_for_check.add_css_class("daemon-active");
+                        daemon_indicator_for_check.set_tooltip_text(Some("Daemon service is running - Click to view settings"));
+                        *last_error.borrow_mut() = None;
+                    }
+                }
+                Err(err) => {
+                    daemon_indicator_for_check.remove_css_class("daemon-active");
+                    daemon_indicator_for_check.add_css_class("daemon-error");
+                    daemon_indicator_for_check.set_tooltip_text(Some(&format!("Daemon error: {}", err)));
+                    *last_error.borrow_mut() = Some(err.clone());
+                }
+            }
             
             let prev_available = *was_available.borrow();
             if is_available && !prev_available {
@@ -422,7 +442,20 @@ impl HyperfanWindow {
             glib::ControlFlow::Continue
         });
 
-        daemon_indicator.set_visible(hf_core::is_daemon_available());
+        // Initial daemon check
+        let initial_ping = hf_core::daemon_client::ping_daemon();
+        daemon_indicator.set_visible(true);
+        match &initial_ping {
+            Ok(()) => {
+                daemon_indicator.add_css_class("daemon-active");
+                daemon_indicator.set_tooltip_text(Some("Daemon service is running - Click to view settings"));
+            }
+            Err(err) => {
+                daemon_indicator.remove_css_class("daemon-active");
+                daemon_indicator.add_css_class("daemon-error");
+                daemon_indicator.set_tooltip_text(Some(&format!("Daemon error: {}", err)));
+            }
+        }
 
         // Handle window close
         let settings_for_close = settings.clone();

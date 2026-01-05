@@ -1,6 +1,6 @@
 [package]
 name = "hf-gtk"
-version = "0.4.9"
+version = "0.4.96"
 edition = "2021"
 authors = ["henry kleyn"]
 license = "GPL-3.0-or-later"

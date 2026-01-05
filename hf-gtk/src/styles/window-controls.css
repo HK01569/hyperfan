@@ -87,6 +87,29 @@ headerbar button.daemon-active:focus-visible {
 }
 
 /* ================================================================
+ * Daemon Indicator - Error State
+ * ================================================================ */
+headerbar button.daemon-error {
+    min-width: var(--hf-size-button-daemon);
+    max-width: var(--hf-size-button-daemon);
+    min-height: var(--hf-size-button-daemon);
+    max-height: var(--hf-size-button-daemon);
+    padding: 2px;
+    border-radius: var(--hf-radius-sm);
+    color: @error_color;
+}
+
+headerbar button.daemon-error:hover {
+    background-color: alpha(@error_color, var(--hf-opacity-active));
+    color: @error_color;
+}
+
+headerbar button.daemon-error:focus-visible {
+    outline: var(--hf-focus-width-small) solid @error_color;
+    outline-offset: var(--hf-focus-offset-small);
+}
+
+/* ================================================================
  * Support Button
  * ================================================================ */
 headerbar button.support-button {

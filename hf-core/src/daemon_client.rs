@@ -7,6 +7,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::cell::RefCell;
 
 use crate::service::get_socket_path;
@@ -15,13 +16,22 @@ const TIMEOUT_MS: u64 = 5000;
 
 const MAX_MESSAGE_SIZE: usize = hf_protocol::MAX_MESSAGE_SIZE;
 
-/// Initial buffer size for responses (most are small)
-const INITIAL_BUFFER_SIZE: usize = 512;
+/// Initial buffer size for responses (ListAll responses are ~4KB typically)
+const INITIAL_BUFFER_SIZE: usize = 4096;
 
-/// Client-side rate limit: maximum requests per window
+/// Default client-side rate limit: maximum requests per window
 /// At 100ms poll interval, we need ~100 req/10s just for sensor polling
-/// Plus additional requests for UI interactions, so allow 200 req/10s
-const CLIENT_RATE_LIMIT_REQUESTS: u32 = 200;
+/// Plus additional requests for UI interactions, so allow 1500 req/10s
+const DEFAULT_CLIENT_RATE_LIMIT: u32 = 1500;
+
+/// Minimum rate limit (cannot go below this)
+pub const MIN_RATE_LIMIT: u32 = hf_protocol::MIN_RATE_LIMIT;
+
+/// Maximum rate limit (cannot exceed this)  
+pub const MAX_RATE_LIMIT: u32 = hf_protocol::MAX_RATE_LIMIT;
+
+/// Current client-side rate limit (configurable at runtime)
+static CLIENT_RATE_LIMIT: AtomicU32 = AtomicU32::new(DEFAULT_CLIENT_RATE_LIMIT);
 
 /// Client-side rate limit window duration
 const CLIENT_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
@@ -58,13 +68,14 @@ impl ClientRateLimiter {
             self.window_start = now;
         }
         
-        if self.request_count >= CLIENT_RATE_LIMIT_REQUESTS {
+        let current_limit = CLIENT_RATE_LIMIT.load(Ordering::Relaxed);
+        if self.request_count >= current_limit {
             let wait_time = CLIENT_RATE_LIMIT_WINDOW
                 .checked_sub(now.duration_since(self.window_start))
                 .unwrap_or(Duration::from_secs(0));
             return Err(format!(
                 "Client rate limit exceeded ({} req/{}s). Retry in {:.1}s",
-                CLIENT_RATE_LIMIT_REQUESTS,
+                current_limit,
                 CLIENT_RATE_LIMIT_WINDOW.as_secs(),
                 wait_time.as_secs_f32()
             ));
@@ -97,6 +108,7 @@ pub type DaemonFanMapping = hf_protocol::FanMapping;
 pub type DaemonManualPwmFanPairing = hf_protocol::ManualPwmFanPairing;
 pub type DaemonEcChipInfo = hf_protocol::EcChipInfo;
 pub type DaemonEcRegisterValue = hf_protocol::EcRegisterValue;
+pub type DaemonAllHardwareData = hf_protocol::AllHardwareData;
 
 /// Daemon client for making requests
 pub struct DaemonClient {
@@ -134,9 +146,8 @@ impl DaemonClient {
     }
     
     /// Check if connection is still healthy
+    /// Returns false if socket has errors OR if there's stale data in the buffer
     fn is_healthy(&self) -> bool {
-        // Try to peek at the socket to see if it's still connected
-        // This is a non-blocking check
         use std::os::unix::io::AsRawFd;
         let fd = self.writer.as_raw_fd();
         
@@ -150,7 +161,7 @@ impl DaemonClient {
         // 3. len is set to the correct size of the error variable
         // 4. SOL_SOCKET and SO_ERROR are valid socket option constants
         // The function only reads the socket error state without modifying socket behavior.
-        unsafe {
+        let socket_ok = unsafe {
             let result = libc::getsockopt(
                 fd,
                 libc::SOL_SOCKET,
@@ -158,10 +169,17 @@ impl DaemonClient {
                 &mut error as *mut _ as *mut libc::c_void,
                 &mut len,
             );
-            
-            // If getsockopt succeeds and error is 0, socket is healthy
             result == 0 && error == 0
+        };
+        
+        if !socket_ok {
+            return false;
         }
+        
+        // Check if there's stale data in the read buffer
+        // If the buffer has data, the connection is "dirty" and should be discarded
+        // This prevents reading stale responses from previous requests
+        self.reader.buffer().is_empty()
     }
     
     /// Connect to the daemon (internal)
@@ -209,13 +227,15 @@ impl DaemonClient {
             .map_err(|e| format!("Request validation failed: {}", e))?;
         
         // Wrap request in envelope with unique ID
-        let envelope = hf_protocol::RequestEnvelope::new(req.clone());
-        let request_id = envelope.id;
+        // PERF: Avoid clone by moving req into envelope, get ID first
+        let request_id = hf_protocol::generate_request_id();
+        let envelope = hf_protocol::RequestEnvelope::with_id(req.clone(), request_id);
         
         // Serialize request envelope
-        let mut json = serde_json::to_string(&envelope)
+        // PERF: Use to_vec to avoid intermediate String allocation
+        let mut json = serde_json::to_vec(&envelope)
             .map_err(|e| format!("Failed to serialize request: {}", e))?;
-        json.push('\n');
+        json.push(b'\n');
 
         if json.len() > MAX_MESSAGE_SIZE {
             return Err(crate::error::HyperfanError::MessageTooLarge {
@@ -225,7 +245,7 @@ impl DaemonClient {
         }
 
         // Send (with automatic reconnect on failure)
-        if let Err(e) = self.writer.write_all(json.as_bytes()) {
+        if let Err(e) = self.writer.write_all(&json) {
             if allow_retry {
                 // Connection failed - try to reconnect and retry once
                 *self = Self::connect()
@@ -258,11 +278,14 @@ impl DaemonClient {
             }.to_string());
         }
 
-        let response_str = std::str::from_utf8(&response_buf)
-            .map_err(|e| format!("Response was not valid UTF-8: {}", e))?;
-
-        // Parse response envelope
-        let response_envelope: hf_protocol::ResponseEnvelope = serde_json::from_str(response_str.trim())
+        // PERF: Parse directly from bytes, skip UTF-8 string conversion
+        // Trim trailing newline in-place
+        if response_buf.last() == Some(&b'\n') {
+            response_buf.pop();
+        }
+        
+        // Parse response envelope directly from bytes
+        let response_envelope: hf_protocol::ResponseEnvelope = serde_json::from_slice(&response_buf)
             .map_err(|e| format!("Failed to parse response: {}", e))?;
         
         // Verify response ID matches request ID
@@ -288,6 +311,7 @@ impl DaemonClient {
                 let valid = match req {
                     DaemonRequest::Ping | DaemonRequest::Version => data.value.is_some(),
                     DaemonRequest::ListHardware => data.hardware.is_some(),
+                    DaemonRequest::ListAll => data.all_data.is_some(),
                     DaemonRequest::ReadTemperature { .. } => data.celsius.is_some(),
                     DaemonRequest::ReadFanRpm { .. } => data.rpm.is_some(),
                     DaemonRequest::ReadPwm { .. } => data.pwm.is_some(),
@@ -459,6 +483,19 @@ pub fn daemon_list_hardware() -> Result<DaemonHardwareInfo, String> {
     let mut client = DaemonClient::get_pooled()?;
     let result = match client.request(DaemonRequest::ListHardware)? {
         DaemonResponse::Ok(data) if data.hardware.is_some() => Ok(data.hardware.unwrap()),
+        DaemonResponse::Ok(_) => Err(crate::error::HyperfanError::IpcProtocol("Unexpected response type".to_string()).to_string()),
+        DaemonResponse::Error { message } => Err(crate::error::HyperfanError::DaemonResponse(message).to_string()),
+    };
+    client.return_to_pool();
+    result
+}
+
+/// List all hardware + GPUs in single request (performance optimization)
+/// Reduces IPC round-trips from 2 to 1 for polling
+pub fn daemon_list_all() -> Result<DaemonAllHardwareData, String> {
+    let mut client = DaemonClient::get_pooled()?;
+    let result = match client.request(DaemonRequest::ListAll)? {
+        DaemonResponse::Ok(data) if data.all_data.is_some() => Ok(data.all_data.unwrap()),
         DaemonResponse::Ok(_) => Err(crate::error::HyperfanError::IpcProtocol("Unexpected response type".to_string()).to_string()),
         DaemonResponse::Error { message } => Err(crate::error::HyperfanError::DaemonResponse(message).to_string()),
     };
@@ -641,4 +678,54 @@ pub fn daemon_read_ec_register_range(
     };
     client.return_to_pool();
     result
+}
+
+// ============================================================================
+// Rate Limit Configuration
+// ============================================================================
+
+/// Get the current client-side rate limit
+pub fn get_client_rate_limit() -> u32 {
+    CLIENT_RATE_LIMIT.load(Ordering::Relaxed)
+}
+
+/// Set the client-side rate limit (clamped to valid range)
+/// Takes effect immediately for all subsequent requests
+pub fn set_client_rate_limit(limit: u32) -> u32 {
+    let clamped = limit.clamp(MIN_RATE_LIMIT, MAX_RATE_LIMIT);
+    CLIENT_RATE_LIMIT.store(clamped, Ordering::Relaxed);
+    clamped
+}
+
+/// Get the current daemon-side rate limit
+pub fn daemon_get_rate_limit() -> Result<u32, String> {
+    let mut client = DaemonClient::get_pooled()?;
+    let result = match client.request(DaemonRequest::GetRateLimit)? {
+        DaemonResponse::Ok(data) if data.rate_limit.is_some() => Ok(data.rate_limit.unwrap()),
+        DaemonResponse::Ok(_) => Err(crate::error::HyperfanError::IpcProtocol("Unexpected response type".to_string()).to_string()),
+        DaemonResponse::Error { message } => Err(crate::error::HyperfanError::DaemonResponse(message).to_string()),
+    };
+    client.return_to_pool();
+    result
+}
+
+/// Set the daemon-side rate limit (clamped to valid range by daemon)
+/// Returns the actual limit that was set
+pub fn daemon_set_rate_limit(limit: u32) -> Result<u32, String> {
+    let mut client = DaemonClient::get_pooled()?;
+    let result = match client.request(DaemonRequest::SetRateLimit { limit })? {
+        DaemonResponse::Ok(data) if data.rate_limit.is_some() => Ok(data.rate_limit.unwrap()),
+        DaemonResponse::Ok(_) => Err(crate::error::HyperfanError::IpcProtocol("Unexpected response type".to_string()).to_string()),
+        DaemonResponse::Error { message } => Err(crate::error::HyperfanError::DaemonResponse(message).to_string()),
+    };
+    client.return_to_pool();
+    result
+}
+
+/// Set both client and daemon rate limits simultaneously
+/// Returns (client_limit, daemon_limit) - the actual limits that were set
+pub fn set_rate_limits(limit: u32) -> Result<(u32, u32), String> {
+    let client_limit = set_client_rate_limit(limit);
+    let daemon_limit = daemon_set_rate_limit(limit)?;
+    Ok((client_limit, daemon_limit))
 }

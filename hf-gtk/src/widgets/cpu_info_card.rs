@@ -268,19 +268,16 @@ impl CpuInfoCard {
     /// Update the card with fresh sensor data
     /// PERFORMANCE: Uses cached data from runtime, avoids blocking I/O on main thread
     pub fn update(&self) {
-        // Try to get cached sensor data (non-blocking)
-        let cached = crate::runtime::get_sensors();
+        // Get cached sensor data (non-blocking, no fallback IPC)
+        let Some(cached) = crate::runtime::get_sensors() else {
+            return; // No data yet, skip this update
+        };
         
         // Update temperature sensors (only if value changed)
         for sensor in self.temp_sensors.borrow().iter() {
-            // Try cached data first, fallback to direct read only if needed
-            let temp = cached.as_ref()
-                .and_then(|data| {
-                    data.temperatures.iter()
-                        .find(|t| t.path == sensor.path)
-                        .map(|t| t.temp_celsius)
-                })
-                .or_else(|| daemon_client::daemon_read_temperature(&sensor.path).ok());
+            let temp = cached.temperatures.iter()
+                .find(|t| t.path == sensor.path)
+                .map(|t| t.temp_celsius);
             
             if let Some(temp) = temp {
                 let new_text = hf_core::display::format_temp_precise(temp);

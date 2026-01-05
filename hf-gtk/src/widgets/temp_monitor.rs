@@ -152,22 +152,16 @@ impl TempMonitorGroup {
     /// PERFORMANCE: Uses cached sensor data from runtime instead of blocking daemon IPC
     pub fn refresh(&self) {
         // Try to get cached sensor data from runtime (non-blocking, now uses blocking_read internally)
-        let cached_temps = crate::runtime::get_sensors();
+        let Some(cached_temps) = crate::runtime::get_sensors() else {
+            return; // No data yet, skip this update
+        };
         
         for monitor in &self.monitors {
             let path = monitor.sensor_path().to_string_lossy();
             
-            // First try cached data, fall back to direct read only if cache miss
-            let temp = cached_temps.as_ref()
-                .and_then(|data| {
-                    data.temperatures.iter()
-                        .find(|t| t.path == path.as_ref())
-                        .map(|t| t.temp_celsius)
-                })
-                .or_else(|| {
-                    // Fallback: daemon read (should be rare with blocking_read fix)
-                    daemon_client::daemon_read_temperature(path.as_ref()).ok()
-                });
+            let temp = cached_temps.temperatures.iter()
+                .find(|t| t.path == path.as_ref())
+                .map(|t| t.temp_celsius);
             
             if let Some(temp) = temp {
                 monitor.update(temp);

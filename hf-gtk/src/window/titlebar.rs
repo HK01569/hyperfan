@@ -46,8 +46,12 @@ const ICON_SUPPORT: &str = "money-symbolic";
 /// CSS classes for window controls
 const CLASSES_WINDOW_CONTROL: &[&str] = &["flat", "window-control"];
 const CLASSES_CLOSE_BUTTON: &[&str] = &["flat", "window-control", "close-button"];
-const CLASSES_DAEMON_INDICATOR: &[&str] = &["flat", "daemon-active"];
+const CLASSES_DAEMON_ACTIVE: &[&str] = &["flat", "daemon-active"];
 const CLASSES_SUPPORT_BUTTON: &[&str] = &["flat", "support-button"];
+
+/// CSS class for daemon error state
+const CLASS_DAEMON_ERROR: &str = "daemon-error";
+const CLASS_DAEMON_ACTIVE: &str = "daemon-active";
 
 /// Default tooltip text
 const TOOLTIP_DAEMON_DEFAULT: &str = "Daemon service is running - Click to view settings";
@@ -108,6 +112,24 @@ impl Titlebar {
     /// * `visible` - Whether the daemon is currently available
     pub fn set_daemon_available(&self, visible: bool) {
         self.daemon_indicator.set_visible(visible);
+    }
+
+    /// Update the daemon indicator to show an error state.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - Optional error message. If Some, shows red error state with error tooltip.
+    ///             If None, shows green healthy state with default tooltip.
+    pub fn set_daemon_error(&self, error: Option<&str>) {
+        if let Some(err_msg) = error {
+            self.daemon_indicator.remove_css_class(CLASS_DAEMON_ACTIVE);
+            self.daemon_indicator.add_css_class(CLASS_DAEMON_ERROR);
+            self.daemon_indicator.set_tooltip_text(Some(&format!("Daemon error: {}", err_msg)));
+        } else {
+            self.daemon_indicator.remove_css_class(CLASS_DAEMON_ERROR);
+            self.daemon_indicator.add_css_class(CLASS_DAEMON_ACTIVE);
+            self.daemon_indicator.set_tooltip_text(Some(TOOLTIP_DAEMON_DEFAULT));
+        }
     }
 
     /// Update the window title dynamically.
@@ -195,7 +217,7 @@ impl<'a> TitlebarBuilder<'a> {
         // Daemon status indicator (left side)
         let daemon_indicator = Button::builder()
             .icon_name(ICON_DAEMON)
-            .css_classes(CLASSES_DAEMON_INDICATOR)
+            .css_classes(CLASSES_DAEMON_ACTIVE)
             .tooltip_text(&self.daemon_indicator_tooltip)
             .accessible_role(gtk4::AccessibleRole::Button)
             .visible(false) // Hidden until daemon is detected

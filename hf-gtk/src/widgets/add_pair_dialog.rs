@@ -668,7 +668,8 @@ impl AddPairDialog {
         let last_render_time: Rc<RefCell<Option<i64>>> = Rc::new(RefCell::new(None));
         
         preview_drawing.add_tick_callback(move |widget, frame_clock| {
-            if !*has_temp_source_for_anim.borrow() {
+            // PERFORMANCE: Skip if widget is not visible or no temp source
+            if !widget.is_mapped() || !*has_temp_source_for_anim.borrow() {
                 return glib::ControlFlow::Continue;
             }
 
@@ -863,13 +864,19 @@ impl AddPairDialog {
         
         // Check if this fan should be pre-selected (when editing)
         let should_preselect = if let Some(pair) = edit_pair {
-            pair.fan_paths.contains(&fan.pwm_path)
+            tracing::debug!(
+                "Checking fan pre-selection: fan_path='{}', pair.fan_paths={:?}, pair.fan_path='{}'",
+                fan.pwm_path, pair.fan_paths, pair.fan_path
+            );
+            // Check both fan_paths (multi-fan) and fan_path (legacy single-fan)
+            pair.fan_paths.contains(&fan.pwm_path) || pair.fan_path == fan.pwm_path
         } else {
             false
         };
         
         // Pre-select and add to selected_fans if editing
         if should_preselect {
+            tracing::info!("Pre-selecting fan: {}", fan.pwm_path);
             checkbox.set_active(true);
             let mut fans = selected_fans.borrow_mut();
             if !fans.iter().any(|f| f.pwm_path == fan.pwm_path) {

@@ -459,23 +459,17 @@ impl SensorsPage {
     }
 
     /// Read and display current temperatures for all sensors
-    /// PERFORMANCE: Uses cached sensor data from runtime instead of blocking file I/O
+    /// PERFORMANCE: Uses cached sensor data from runtime (no fallback IPC calls)
     fn update_sensor_readings(sensors: &Rc<RefCell<Vec<SensorDisplay>>>) {
-        // Try to get cached sensor data from runtime (non-blocking)
-        let cached_temps = crate::runtime::get_sensors();
+        // Get cached sensor data from runtime (non-blocking)
+        let Some(cached_temps) = crate::runtime::get_sensors() else {
+            return; // No data yet, skip this update
+        };
         
         for sensor in sensors.borrow().iter() {
-            // First try cached data, fall back to direct read only if cache miss
-            let temp = cached_temps.as_ref()
-                .and_then(|data| {
-                    data.temperatures.iter()
-                        .find(|t| t.path == sensor.path)
-                        .map(|t| t.temp_celsius)
-                })
-                .or_else(|| {
-                    // Fallback: daemon read (should be rare)
-                    daemon_client::daemon_read_temperature(&sensor.path).ok()
-                });
+            let temp = cached_temps.temperatures.iter()
+                .find(|t| t.path == sensor.path)
+                .map(|t| t.temp_celsius);
             
             if let Some(temp) = temp {
                 let new_text = hf_core::display::format_temp_precise(temp);
@@ -487,27 +481,19 @@ impl SensorsPage {
     }
 
     /// Read and display current fan RPM for all fan sensors
-    /// PERFORMANCE: Uses cached sensor data from runtime instead of blocking file I/O
+    /// PERFORMANCE: Uses cached sensor data from runtime (no fallback IPC calls)
     fn update_fan_readings(fans: &Rc<RefCell<Vec<FanDisplay>>>) {
-        // Try to get cached sensor data from runtime (non-blocking)
-        let cached_data = crate::runtime::get_sensors();
+        // Get cached sensor data from runtime (non-blocking)
+        let Some(cached_data) = crate::runtime::get_sensors() else {
+            return; // No data yet, skip this update
+        };
         
         for fan in fans.borrow().iter() {
-            // First try cached data, fall back to direct read only if cache miss
-            let fan_data = cached_data.as_ref()
-                .and_then(|data| {
-                    data.fans.iter()
-                        .find(|f| f.path == fan.path)
-                });
+            let fan_data = cached_data.fans.iter()
+                .find(|f| f.path == fan.path);
             
-            let rpm = fan_data
+            let new_rpm_text = fan_data
                 .and_then(|f| f.rpm)
-                .or_else(|| {
-                    // Fallback: daemon read (should be rare)
-                    daemon_client::daemon_read_fan_rpm(&fan.path).ok()
-                });
-            
-            let new_rpm_text = rpm
                 .map(|r| format!("{} RPM", r))
                 .unwrap_or_else(|| "-- RPM".to_string());
             
@@ -517,9 +503,8 @@ impl SensorsPage {
             
             // Update PWM percentage if label exists
             if let Some(pwm_label) = &fan.pwm_label {
-                let percent = fan_data.and_then(|f| f.percent);
-                
-                let new_pwm_text = percent
+                let new_pwm_text = fan_data
+                    .and_then(|f| f.percent)
                     .map(|p| format!("{:.0}%", p))
                     .unwrap_or_else(|| "--%".to_string());
                 

@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 hf-core = { path = "../hf-core" }
+hf-gpu = { path = "../hf-gpu" }
 hf-protocol = { path = "../hf-protocol" }
 hf-error = { path = "../hf-error" }
 serde = { version = "1", features = ["derive"] }

@@ -68,6 +68,8 @@ pub enum Request {
     Ping,
     Version,
     ListHardware,
+    /// Batch request: returns hardware + GPUs in single response (performance optimization)
+    ListAll,
     ReadTemperature { path: String },
     ReadFanRpm { path: String },
     ReadPwm { path: String },
@@ -95,6 +97,10 @@ pub enum Request {
     ReadEcRegisterRange { chip_path: String, start_register: u8, count: u8 },
     SetGlobalMode { mode: GlobalMode },
     GetGlobalMode,
+    /// Get current daemon rate limit
+    GetRateLimit,
+    /// Set daemon rate limit (1500-9999 requests per 10s window)
+    SetRateLimit { limit: u32 },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -111,11 +117,14 @@ impl Request {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Request::Ping | Request::Version | Request::ListHardware 
-            | Request::ListGpus | Request::DetectFanMappings 
+            | Request::ListAll | Request::ListGpus | Request::DetectFanMappings 
             | Request::ReloadConfig | Request::GetManualPairings
             | Request::ListEcChips | Request::GetGlobalMode => Ok(()),
             
             Request::SetGlobalMode { mode: _ } => Ok(()),
+            
+            Request::GetRateLimit => Ok(()),
+            Request::SetRateLimit { limit } => validate_rate_limit(*limit),
             
             Request::ReadTemperature { path } => validate_hwmon_path(path),
             Request::ReadFanRpm { path } => validate_hwmon_path(path),
@@ -186,6 +195,7 @@ impl Request {
             Request::Ping => "Ping",
             Request::Version => "Version",
             Request::ListHardware => "ListHardware",
+            Request::ListAll => "ListAll",
             Request::ReadTemperature { .. } => "ReadTemperature",
             Request::ReadFanRpm { .. } => "ReadFanRpm",
             Request::ReadPwm { .. } => "ReadPwm",
@@ -208,6 +218,8 @@ impl Request {
             Request::ReadEcRegisterRange { .. } => "ReadEcRegisterRange",
             Request::SetGlobalMode { .. } => "SetGlobalMode",
             Request::GetGlobalMode => "GetGlobalMode",
+            Request::GetRateLimit => "GetRateLimit",
+            Request::SetRateLimit { .. } => "SetRateLimit",
         }
     }
 }
@@ -251,6 +263,9 @@ pub struct ResponseData {
     pub hardware: Option<HardwareInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpus: Option<Vec<GpuInfo>>,
+    /// Batched response: hardware + GPUs combined (for ListAll)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_data: Option<AllHardwareData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fan_mappings: Option<Vec<FanMapping>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -263,6 +278,8 @@ pub struct ResponseData {
     pub ec_registers: Option<Vec<EcRegisterValue>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_mode: Option<GlobalMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<u32>,
 }
 
 impl Default for ResponseData {
@@ -274,12 +291,14 @@ impl Default for ResponseData {
             pwm: None,
             hardware: None,
             gpus: None,
+            all_data: None,
             fan_mappings: None,
             manual_pairings: None,
             ec_chips: None,
             ec_register: None,
             ec_registers: None,
             global_mode: None,
+            rate_limit: None,
         }
     }
 }
@@ -292,12 +311,21 @@ impl ResponseData {
     pub fn pwm_value(p: u8) -> Self { Self { pwm: Some(p), ..Self::default() } }
     pub fn hw(h: HardwareInfo) -> Self { Self { hardware: Some(h), ..Self::default() } }
     pub fn gpu_list(g: Vec<GpuInfo>) -> Self { Self { gpus: Some(g), ..Self::default() } }
+    pub fn all(data: AllHardwareData) -> Self { Self { all_data: Some(data), ..Self::default() } }
     pub fn mappings(m: Vec<FanMapping>) -> Self { Self { fan_mappings: Some(m), ..Self::default() } }
     pub fn pairings(p: Vec<ManualPwmFanPairing>) -> Self { Self { manual_pairings: Some(p), ..Self::default() } }
     pub fn chips(c: Vec<EcChipInfo>) -> Self { Self { ec_chips: Some(c), ..Self::default() } }
     pub fn register(r: EcRegisterValue) -> Self { Self { ec_register: Some(r), ..Self::default() } }
     pub fn registers(r: Vec<EcRegisterValue>) -> Self { Self { ec_registers: Some(r), ..Self::default() } }
     pub fn mode(m: GlobalMode) -> Self { Self { global_mode: Some(m), ..Self::default() } }
+    pub fn rate_limit(r: u32) -> Self { Self { rate_limit: Some(r), ..Self::default() } }
+}
+
+/// Batched hardware data (hwmon + GPUs) for efficient polling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllHardwareData {
+    pub hardware: HardwareInfo,
+    pub gpus: Vec<GpuInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -568,6 +596,22 @@ pub fn validate_ec_register_count(count: u8) -> Result<(), &'static str> {
     }
     if count > MAX_EC_REGISTER_COUNT {
         return Err("Register count exceeds maximum (64)");
+    }
+    Ok(())
+}
+
+/// Minimum rate limit (requests per 10s window)
+pub const MIN_RATE_LIMIT: u32 = 1500;
+
+/// Maximum rate limit (requests per 10s window)
+pub const MAX_RATE_LIMIT: u32 = 9999;
+
+pub fn validate_rate_limit(limit: u32) -> Result<(), String> {
+    if limit < MIN_RATE_LIMIT {
+        return Err(format!("Rate limit too low (minimum {})", MIN_RATE_LIMIT));
+    }
+    if limit > MAX_RATE_LIMIT {
+        return Err(format!("Rate limit too high (maximum {})", MAX_RATE_LIMIT));
     }
     Ok(())
 }

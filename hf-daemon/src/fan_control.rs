@@ -973,20 +973,24 @@ fn set_pwm_inner(pwm_path: &str, value: u8) -> Result<(), String> {
         .to_string_lossy()
         .to_string();
 
-    // Ensure manual control is enabled (mode 1)
+    // Handle PWM enable mode:
+    // - PWM 0: Set enable to 0 (disabled) to actually stop the fan
+    // - PWM > 0: Set enable to 1 (manual) for software control
+    // Many fans won't stop at PWM 0 with enable=1, they just spin at minimum RPM
     if std::path::Path::new(&enable_path).exists() {
+        let target_mode = if value == 0 { 0 } else { 1 };
         let current_mode = std::fs::read_to_string(&enable_path)
             .ok()
             .and_then(|s| s.trim().parse::<u8>().ok())
             .unwrap_or(0);
 
-        if current_mode != 1 {
-            std::fs::write(&enable_path, "1")
-                .map_err(|e| format!("Failed to enable manual PWM: {}", e))?;
+        if current_mode != target_mode {
+            std::fs::write(&enable_path, target_mode.to_string())
+                .map_err(|e| format!("Failed to set PWM enable mode {}: {}", target_mode, e))?;
         }
     }
 
-    // Set PWM value
+    // Set PWM value (even when disabled, set to 0 for consistency)
     std::fs::write(pwm_path, value.to_string())
         .map_err(|e| format!("Failed to write PWM: {}", e))?;
 

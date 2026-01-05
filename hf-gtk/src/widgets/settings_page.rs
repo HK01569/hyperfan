@@ -246,7 +246,6 @@ impl SettingsPage {
             pending_for_apply.borrow_mut().general.apply_curves_on_startup = enabled;
             *dirty_for_apply.borrow_mut() = true;
             apply_btn_for_apply.set_sensitive(true);
-            debug!("Staged apply_curves_on_startup = {}", enabled);
         });
         general_group.add(&apply_row);
         
@@ -422,7 +421,6 @@ impl SettingsPage {
             pending_for_poll.borrow_mut().general.poll_interval_ms = ms;
             *dirty_for_poll.borrow_mut() = true;
             apply_btn_for_poll.set_sensitive(true);
-            debug!("Staged poll_interval_ms = {}", ms);
         });
         general_group.add(&poll_row);
 
@@ -467,9 +465,37 @@ impl SettingsPage {
             pending_for_page.borrow_mut().general.default_page = page.to_string();
             *dirty_for_page.borrow_mut() = true;
             apply_btn_for_page.set_sensitive(true);
-            debug!("Staged default_page = {}", page);
         });
         general_group.add(&default_page_row);
+
+        // Rate limit setting (1500-9999 requests per 10s window)
+        let rate_limit_row = adw::SpinRow::builder()
+            .title("Request Rate Limit")
+            .subtitle("Max requests per 10 seconds (applies to client and daemon)")
+            .adjustment(&gtk4::Adjustment::new(
+                settings.general.rate_limit as f64,
+                hf_core::MIN_RATE_LIMIT as f64,
+                hf_core::MAX_RATE_LIMIT as f64,
+                100.0,  // step increment
+                500.0,  // page increment
+                0.0,    // page size (unused for spin)
+            ))
+            .climb_rate(100.0)
+            .digits(0)
+            .numeric(true)
+            .build();
+        
+        let pending_for_rate = pending_settings.clone();
+        let dirty_for_rate = is_dirty.clone();
+        let apply_btn_for_rate = apply_btn.clone();
+        rate_limit_row.connect_value_notify(move |row| {
+            let limit = row.value() as u32;
+            let clamped = limit.clamp(hf_core::MIN_RATE_LIMIT, hf_core::MAX_RATE_LIMIT);
+            pending_for_rate.borrow_mut().general.rate_limit = clamped;
+            *dirty_for_rate.borrow_mut() = true;
+            apply_btn_for_rate.set_sensitive(true);
+        });
+        general_group.add(&rate_limit_row);
 
         content.append(&general_group);
 
@@ -498,7 +524,6 @@ impl SettingsPage {
             pending_for_unit.borrow_mut().display.temperature_unit = unit.to_string();
             *dirty_for_unit.borrow_mut() = true;
             apply_btn_for_unit.set_sensitive(true);
-            debug!("Staged temperature_unit = {}", unit);
         });
         display_group.add(&unit_row);
 
@@ -520,7 +545,6 @@ impl SettingsPage {
             pending_for_metric.borrow_mut().display.fan_control_metric = metric.to_string();
             *dirty_for_metric.borrow_mut() = true;
             apply_btn_for_metric.set_sensitive(true);
-            debug!("Staged fan_control_metric = {}", metric);
         });
         display_group.add(&fan_metric_row);
 
@@ -546,7 +570,6 @@ impl SettingsPage {
             pending_for_tray.borrow_mut().display.show_tray_icon = enabled;
             *dirty_for_tray.borrow_mut() = true;
             apply_btn_for_tray.set_sensitive(true);
-            debug!("Staged show_tray_icon = {}", enabled);
         });
         display_group.add(&tray_row);
 
@@ -580,7 +603,6 @@ impl SettingsPage {
             pending_for_graph.borrow_mut().display.graph_style = style.to_string();
             *dirty_for_graph.borrow_mut() = true;
             apply_btn_for_graph.set_sensitive(true);
-            debug!("Staged graph_style = {}", style);
         });
         display_group.add(&graph_row);
 
@@ -612,7 +634,6 @@ impl SettingsPage {
             pending_for_smoothing.borrow_mut().display.graph_smoothing = smoothing.to_string();
             *dirty_for_smoothing.borrow_mut() = true;
             apply_btn_for_smoothing.set_sensitive(true);
-            debug!("Staged graph_smoothing = {}", smoothing);
         });
         display_group.add(&smoothing_row);
 
@@ -693,7 +714,6 @@ impl SettingsPage {
             pending_for_fps.borrow_mut().display.frame_rate = fps;
             *dirty_for_fps.borrow_mut() = true;
             apply_btn_for_fps.set_sensitive(true);
-            debug!("Staged frame_rate = {}", fps);
         });
         display_group.add(&frame_rate_row);
 
@@ -731,7 +751,6 @@ impl SettingsPage {
             pending_for_color.borrow_mut().display.color_scheme = scheme.to_string();
             *dirty_for_color.borrow_mut() = true;
             apply_btn_for_color.set_sensitive(true);
-            debug!("Staged color_scheme = {}", scheme);
         });
         display_group.add(&color_row);
 
@@ -769,7 +788,6 @@ impl SettingsPage {
             pending_for_backend.borrow_mut().display.display_backend = backend.to_string();
             *dirty_for_backend.borrow_mut() = true;
             apply_btn_for_backend.set_sensitive(true);
-            debug!("Staged display_backend = {}", backend);
         });
         display_group.add(&backend_row);
 
@@ -807,7 +825,6 @@ impl SettingsPage {
             pending_for_wm.borrow_mut().display.window_manager = wm.to_string();
             *dirty_for_wm.borrow_mut() = true;
             apply_btn_for_wm.set_sensitive(true);
-            debug!("Staged window_manager = {}", wm);
         });
         display_group.add(&wm_row);
 
@@ -998,6 +1015,19 @@ impl SettingsPage {
                     }
                 }
                 return;
+            }
+            
+            // Apply rate limit immediately to both client and daemon
+            let rate_limit = settings_to_save.general.rate_limit;
+            match hf_core::set_rate_limits(rate_limit) {
+                Ok((client_limit, daemon_limit)) => {
+                    info!("Rate limit applied: client={}, daemon={}", client_limit, daemon_limit);
+                }
+                Err(e) => {
+                    // Client-side is already set, daemon might not be running
+                    hf_core::set_client_rate_limit(rate_limit);
+                    warn!("Could not set daemon rate limit (daemon may not be running): {}", e);
+                }
             }
                 
             // Restart if window manager or display backend changed
