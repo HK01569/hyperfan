@@ -1,9 +1,15 @@
 [Icon Theme]
 Name=Hyperfan
 Comment=Hyperfan application icons
-Directories=scalable/actions
+Directories=scalable/actions,scalable/apps
 
 [scalable/actions]
+Size=48
+Type=Scalable
+MinSize=16
+MaxSize=256
+
+[scalable/apps]
 Size=48
 Type=Scalable
 MinSize=16

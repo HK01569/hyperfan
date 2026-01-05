@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Center hub -->
+  <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+  
+  <!-- Fan blade 1 (top) -->
+  <path d="M12 9.5C12 9.5 11 4 7.5 4C4 4 4 7.5 4 7.5C4 11 9.5 12 9.5 12" fill="currentColor" opacity="0.9"/>
+  
+  <!-- Fan blade 2 (bottom-right) -->
+  <path d="M14.5 12C14.5 12 20 11 20 7.5C20 4 16.5 4 16.5 4C13 4 12 9.5 12 9.5" fill="currentColor" opacity="0.9"/>
+  
+  <!-- Fan blade 3 (bottom-left) -->
+  <path d="M12 14.5C12 14.5 13 20 16.5 20C20 20 20 16.5 20 16.5C20 13 14.5 12 14.5 12" fill="currentColor" opacity="0.9"/>
+  
+  <!-- Fan blade 4 (top-left) -->
+  <path d="M9.5 12C9.5 12 4 13 4 16.5C4 20 7.5 20 7.5 20C11 20 12 14.5 12 14.5" fill="currentColor" opacity="0.9"/>
+  
+  <!-- Outer ring hint -->
+  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="0.75" fill="none" opacity="0.3"/>
+</svg>
