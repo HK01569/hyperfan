@@ -1,3 +1,6 @@
+# Donation request!
+I need an Intel ARC GPU to validate hyperfan against real hardware. can you help? See my Kofi link or get in touch. THANK YOU!
+
 # Hyperfan
 Fan control platform for Linux enthusiasts who demand precise thermal management, written in Rust!
 
