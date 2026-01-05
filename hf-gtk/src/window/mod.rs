@@ -115,6 +115,7 @@ impl HyperfanWindow {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Hyperfan")
+            .icon_name("fan-symbolic")
             .default_width(default_width)
             .default_height(default_height)
             .maximized(was_maximized)
