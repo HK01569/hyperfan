@@ -1,6 +1,5 @@
 # Hyperfan
-
-Professional fan control platform for Linux enthusiasts who demand precise thermal management, written in Rust!
+Fan control platform for Linux enthusiasts who demand precise thermal management, written in Rust!
 
 Hyperfan provides comprehensive control over system cooling with a modern GTK4 interface, robust hardware detection, and safety-first architecture. Whether you're building a silent workstation, optimizing a gaming rig, or managing server thermals, Hyperfan delivers the precision you need. QT4 support is planned, but work on this has not yet been started. 
 
